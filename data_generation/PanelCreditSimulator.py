@@ -415,23 +415,23 @@ class PanelCreditSimulator:
                 firms.loc[treated_now, 'cohort'] = cohort_in_period
                 firms.loc[treated_now, 'periodo_tratamiento'] = t
 
-        #         demo_msg = f", efecto demo: {demo_effect:+.3f}" if demo_effect != 0 else ""
-        #         print(f"  Período {t} (Cohorte {cohort_in_period}): {treated_now.sum()} tratadas (cupo: {cupo}{demo_msg})")
+                demo_msg = f", efecto demo: {demo_effect:+.3f}" if demo_effect != 0 else ""
+                print(f"  Período {t} (Cohorte {cohort_in_period}): {treated_now.sum()} tratadas (cupo: {cupo}{demo_msg})")
 
-            # # Estado de tratamiento
-            # pdata['tratado'] = firms['ever_treated'] & (firms['periodo_tratamiento'] <= t)
-            # pdata['cohort'] = np.where(pdata['tratado'], firms['cohort'], -1)
-            # pdata['elegible'] = self._check_eligibility(firms, t)
+            # Estado de tratamiento
+            pdata['tratado'] = firms['ever_treated'] & (firms['periodo_tratamiento'] <= t)
+            pdata['cohort'] = np.where(pdata['tratado'], firms['cohort'], -1)
+            pdata['elegible'] = self._check_eligibility(firms, t)
 
-        #     panel_data.append(pdata)
+            panel_data.append(pdata)
 
-        # # Combinar panel
-        # panel = pd.concat(panel_data, ignore_index=True)
+        # Combinar panel
+        panel = pd.concat(panel_data, ignore_index=True)
 
-        # # Etiquetas temporales
-        # panel['periodo_relativo'] = panel['periodo'] - t0
-        # panel['año'] = self.config['año_inicio'] + panel['periodo'] // 4
-        # panel['trimestre'] = (panel['periodo'] % 4) + 1
-        # panel['fecha'] = panel['año'].astype(str) + '-Q' + panel['trimestre'].astype(str)
+        # Etiquetas temporales
+        panel['periodo_relativo'] = panel['periodo'] - t0
+        panel['año'] = self.config['año_inicio'] + panel['periodo'] // 4
+        panel['trimestre'] = (panel['periodo'] % 4) + 1
+        panel['fecha'] = panel['año'].astype(str) + '-Q' + panel['trimestre'].astype(str)
 
-        # return panel
+        return panel
