@@ -8,7 +8,7 @@ CONFIG = {
     # PARÁMETROS GENERALES
     # -------------------------------------------------------------------------
     'nombre_programa': 'Programa de Crédito Productivo PyME',
-    'n_empresas': 10,
+    'n_empresas': 1000,
     'random_seed': 2024,
 
     # -------------------------------------------------------------------------

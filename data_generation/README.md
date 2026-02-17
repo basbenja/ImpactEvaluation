@@ -43,6 +43,10 @@ La configuración centraliza **todos los parámetros** del modelo en un único d
 'año_inicio': 2020,              # Para etiquetas
 ```
 
+Notar que el `periodo_inicio_programa` está indexado en 0. Es decir, si
+`periodo_inicio_programa = 5`, va a haber 5 períodos pre-tratamiento (0, 1, 2, 3, 4) y el
+tratamiento va a comenzar en el período 5.
+
 **Justificación:**
 
 - **2,000 empresas**: Tamaño suficiente para obtener estimaciones precisas y permitir análisis de subgrupos. En programas reales de crédito PyME, es común tener entre 1,000 y 10,000 beneficiarios.
@@ -449,3 +453,83 @@ El shock agregado $\xi_t \sim N(0, 0.015^2)$ captura fluctuaciones macroeconómi
 3. Es más realista que asumir independencia temporal
 
 La volatilidad de 1.5% por trimestre es consistente con fluctuaciones del PIB en economías emergentes.
+
+
+## 2. EJECUCION DEL CODIGO
+
+El formato del panel resultante es:
+- Filas: `n_empresas` * `n_periodos`.
+- Columnas: tantas como variables haya (se pueden incluir o no las no observables).
+
+### 1. Generación de condiciones individuales
+En el período `t = 0`, se genera para cada empresa el valor inicial de cada variable según
+la distribución especificada en la configuración.
+
+Esto resulta en una dataframe con `n_empresas` filas y columnas para cada variable
+(observables y no observables).
+
+### 2. Simulación de la dinámica temporal
+
+En cada período, se genera un dataframe nuevo (en el código es `pdata`):
+
+- Las variables fijas (que son las NO outcomes) se mantienen constantes, es decir el valor
+generado en el paso 1 (Generación de condiciones individuales) se replica en cada período
+para cada empresa.
+
+- Para las outcomes:
+
+  1. Para las empresas que en algún período anterior resultaron tratadas, se calcula el
+  **efecto del tratamiento** correspondiente al período actual (que depende de cuánto
+  tiempo hace que se trataron, dado por `periods_since`). Para las empresas que (aún) no
+  resultaron tratadas, el efecto del tratamiento es cero. **Notar que en este paso
+  aún no se aplica el efecto del tratamiento, solamente se calcula**.
+
+  2. Se calcula el valor de la outcome en el período actual, que depende de:
+     - El valor de la outcome en el período anterior (persistencia)
+     - La tendencia base
+     - El efecto del ciclo económico
+     - Un shock idiosincrático
+     - El efecto del tratamiento (si corresponde) (**acá es donde efectivamente se aplica
+    el efecto del tratamiento**)
+
+     Todos estos parámetros se indican en la configuración en `dinamica_outcomes`.
+
+Entonces, hasta que no se llegue al primer período de tratamiento (i.e. al período
+correspondiente a la primer cohorte), la dinámica temporal de las outcomes se genera
+solamente a partir de la persistencia, la tendencia y el ciclo económico. A partir del
+primer período de tratamiento, para cada empresa se va a generar la dinámica temporal de
+las outcomes teniendo en cuenta también el efecto del tratamiento (si corresponde).
+
+Veamos entonces qué pasa cuando se llega a un período de tratamiento:
+
+1. Se chequea elegibilidad de cada empresa según las reglas indicadas en la configuración.
+Esto se hace en el método `_check_eligibility()`, que devuelve un vector booleano
+indicando si cada empresa es elegible o no. Esta elegibilidad es en base a un criterio
+determinístico, es decir, se cumple o no se cumple. Cabe notar que para este
+elegibilidad **se toma únicamente el valor generado en el período actual**. Además,
+hasta ahora no se descartan las que ya fueron tratadas.
+
+2. Se calcula el **efecto demostración** considerando **todas** las empresas que fueron
+tratadas en algún período anterior. Esto es un número que representa cuánto afecta los
+resultados vistos en los tratados anteriores sobre la probabilidad de tratarse de las
+empresas elegibles en el período actual.
+
+3. Se calcula la **probabilidad de participar** de cada empresa, teniendo en cuenta el
+efecto demostración calculado anteriormente. La forma en la que se aplica este efecto
+demostración es sumándoselo al "intercepto base" del modelo de selección. El intercepto
+base es un término constante que representa la propensión inicial a participar antes de
+sumar efectos de variables (empleados, antigüedad, sector, región, etc.). En un modelo
+logístico, ese valor mueve la probabilidad "de arranque" hacia arriba o hacia abajo. La
+forma en la que los valores de las distintas variables afectan la probabilidad de participar
+se configura en el campo `seleccion`.
+
+4. En este punto ya tenemos la probabilidad de participar de cada empresa. Primero, se
+descartan las empresas que ya fueron tratadas en períodos anteriores: `candidates =
+eligible & ~already_treated`. Luego, para cada empresa candidate, se realiza un sorteo de
+una variable aleatoria uniforme entre 0 y
+1. Si el valor de esta variable es menor o igual a la probabilidad de participar, entonces
+esa empresa se considera participante (tratada) en el período actual. De lo contrario, se
+considera no participante. En este paso se aplica el cupo del programa: si el número de
+empresas que resultan participantes es mayor al cupo, entonces se ordenan según la
+probabilidad de participar y se seleccionan solamente las que tienen mayor probabilidad de
+participar hasta completar el cupo.

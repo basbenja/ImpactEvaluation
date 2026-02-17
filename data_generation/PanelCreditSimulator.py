@@ -34,7 +34,8 @@ class PanelCreditSimulator:
         self.outcomes = list(config['dinamica_outcomes'].keys())
         # Características fijas: se mantienen en todos los períodos.
         self.fixed_features = [
-            var for var in config['variables_iniciales'].keys() if var not in self.outcomes
+            var for var in config['variables_iniciales'].keys()
+            if var not in self.outcomes
         ]
 
     def _generate_variable(self, spec: Dict, n: int) -> np.ndarray:
@@ -74,6 +75,7 @@ class PanelCreditSimulator:
         acuerdo a la distribución especificada en la configuración.
         """
         n = self.config['n_empresas']
+        # Columna "firm_id" con IDs únicos para cada empresa
         data = pd.DataFrame({'firm_id': range(n)})
 
         for var_name, spec in self.config['variables_iniciales'].items():
@@ -91,16 +93,16 @@ class PanelCreditSimulator:
     ) -> np.ndarray:
         """
         Evoluciona un outcome de t-1 a t según el modelo dinámico.
-        
+
         Para continuas: Y_t = Y_{t-1} * (1 + tendencia + ciclo + shock) + efecto_tratamiento
         Para binarias: P(Y_t=1) = rho*Y_{t-1} + (1-rho)*p_base + ciclo + efecto_tratamiento
-        
+
         Args:
             prev_values: Valores en t-1
             outcome: Nombre del outcome ('empleados', 'salario_promedio', 'tiene_credito')
             t: Período actual
             treatment_effect: Efecto del tratamiento a agregar
-            
+
         Returns:
             Valores en t
         """
@@ -149,7 +151,7 @@ class PanelCreditSimulator:
         """
         Calcula efecto dinámico del tratamiento sobre una variable
         específica (outcome).
-        
+
         tau_i(k) = (tau_imm + tau_grad * min(k, k_max)) * (1 + heterogeneidad)
 
         Args:
@@ -368,8 +370,8 @@ class PanelCreditSimulator:
             DataFrame en formato long (firm_id × periodo)
         """
         n_periods = self.config['n_periodos']
-        t0 = self.config['periodo_inicio_programa']
         n_cohorts = self.config['n_cohortes']
+        t0 = self.config['periodo_inicio_programa']
 
         # 1. Generar condiciones iniciales
         firms = self._generate_initial_conditions()
@@ -422,7 +424,7 @@ class PanelCreditSimulator:
 
             # 4. Asignar tratamiento si es período de cohorte
             # t0 es el primer período de tratamiento
-            cohort_in_period = t - t0
+            cohort_in_period = t - t0   # Indexado en 0: cohorte 0 en t0, cohorte 1 en t0+1, etc.
             if 0 <= cohort_in_period < n_cohorts:   # Si el t actual corresponde a una cohorte
                 cupo = self.cupos[cohort_in_period]
                 # En base a los valores generados para el período actual, verificamos
@@ -462,4 +464,21 @@ class PanelCreditSimulator:
         panel['trimestre'] = (panel['periodo'] % 4) + 1
         panel['fecha'] = panel['año'].astype(str) + '-Q' + panel['trimestre'].astype(str)
 
+        self.panel = panel
+
         return panel
+
+    def export_panel(self, path: str, exclude_unobs: bool = True):
+        if not hasattr(self, 'panel'):
+            raise ValueError("Simulación no ejecutada. Llama a simulate() antes de exportar.")
+
+        panel = self.panel
+        if exclude_unobs:
+            unobs = ['calidad_gerencial', 'productividad_latente', 'propension_credito']
+            cols = [c for c in panel.columns if c not in unobs]
+            export_df = panel[cols]
+        else:
+            export_df = panel
+
+        export_df.to_csv(path, index=False)
+        print(f"Exportado: {path} ({export_df.shape})")
