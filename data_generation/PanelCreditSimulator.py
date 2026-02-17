@@ -89,7 +89,21 @@ class PanelCreditSimulator:
         t: int,
         treatment_effect: np.ndarray = None
     ) -> np.ndarray:
-        """Evoluciona outcome de t-1 a t."""
+        """
+        Evoluciona un outcome de t-1 a t según el modelo dinámico.
+        
+        Para continuas: Y_t = Y_{t-1} * (1 + tendencia + ciclo + shock) + efecto_tratamiento
+        Para binarias: P(Y_t=1) = rho*Y_{t-1} + (1-rho)*p_base + ciclo + efecto_tratamiento
+        
+        Args:
+            prev_values: Valores en t-1
+            outcome: Nombre del outcome ('empleados', 'salario_promedio', 'tiene_credito')
+            t: Período actual
+            treatment_effect: Efecto del tratamiento a agregar
+            
+        Returns:
+            Valores en t
+        """
         dyn = self.config['dinamica_outcomes'][outcome]
         n = len(prev_values)
 
@@ -113,8 +127,10 @@ class PanelCreditSimulator:
 
         if treatment_effect is not None:
             if outcome == 'salario_promedio':
+                # Para salario: efecto multiplicativo (porcentual)
                 new_values = new_values * (1 + treatment_effect)
             else:
+                # Para empleados: efecto aditivo
                 new_values = new_values + treatment_effect
 
         new_values = np.maximum(new_values, dyn.get('min', 0))
@@ -133,6 +149,8 @@ class PanelCreditSimulator:
         """
         Calcula efecto dinámico del tratamiento sobre una variable
         específica (outcome).
+        
+        tau_i(k) = (tau_imm + tau_grad * min(k, k_max)) * (1 + heterogeneidad)
 
         Args:
             outcome (str): Nombre del outcome sobre la cual aplicar el efecto.
@@ -172,6 +190,9 @@ class PanelCreditSimulator:
         Args:
             firms (pd.DataFrame): DataFrame con características de las empresas.
             t (int): Período actual.
+
+        Returns:
+            Serie booleana indicando elegibilidad
         """
         eligible = pd.Series(True, index=firms.index)
 
@@ -299,6 +320,9 @@ class PanelCreditSimulator:
         """
         Asigna tratamiento con cupo.
 
+        1. Cada elegible decide si aplica (Bernoulli con p = propensity)
+        2. Si aplicantes > cupo, se seleccionan los de mayor score
+
         Returns:
             pd.Series: Serie booleana indicando qué empresas resultan tratadas
                 en el período actual.
@@ -337,12 +361,17 @@ class PanelCreditSimulator:
         return treated
 
     def simulate(self) -> pd.DataFrame:
-        """Ejecuta simulación del panel completo."""
+        """
+        Ejecuta la simulación completa del panel.
+
+        Returns:
+            DataFrame en formato long (firm_id × periodo)
+        """
         n_periods = self.config['n_periodos']
         t0 = self.config['periodo_inicio_programa']
         n_cohorts = self.config['n_cohortes']
 
-        # Generar condiciones iniciales
+        # 1. Generar condiciones iniciales
         firms = self._generate_initial_conditions()
         firms['ever_treated'] = False
         firms['cohort'] = -1
@@ -350,6 +379,7 @@ class PanelCreditSimulator:
 
         panel_data = []
 
+        # 2. Simular cada período
         for t in range(n_periods):
             pdata = firms[['firm_id', 'empleados_0', 'salario_promedio_0']].copy()
             pdata['periodo'] = t
@@ -369,7 +399,7 @@ class PanelCreditSimulator:
                 periods_since >= 0, periods_since, np.nan
             )
 
-            # Evolucionar outcomes
+            # 3. Evolucionar outcomes
             for outcome in self.outcomes:
                 if t == 0:
                     values = firms[f'{outcome}_0'].values.copy()
@@ -390,7 +420,7 @@ class PanelCreditSimulator:
                 firms[f'{outcome}_{t}'] = values
                 pdata[outcome] = values
 
-            # ¿Es período de tratamiento?
+            # 4. Asignar tratamiento si es período de cohorte
             # t0 es el primer período de tratamiento
             cohort_in_period = t - t0
             if 0 <= cohort_in_period < n_cohorts:   # Si el t actual corresponde a una cohorte
@@ -418,17 +448,15 @@ class PanelCreditSimulator:
                 demo_msg = f", efecto demo: {demo_effect:+.3f}" if demo_effect != 0 else ""
                 print(f"  Período {t} (Cohorte {cohort_in_period}): {treated_now.sum()} tratadas (cupo: {cupo}{demo_msg})")
 
-            # Estado de tratamiento
+            # 5. Agregar estado de tratamiento
             pdata['tratado'] = firms['ever_treated'] & (firms['periodo_tratamiento'] <= t)
             pdata['cohort'] = np.where(pdata['tratado'], firms['cohort'], -1)
             pdata['elegible'] = self._check_eligibility(firms, t)
 
             panel_data.append(pdata)
 
-        # Combinar panel
+        # 6. Combinar y agregar etiquetas temporales
         panel = pd.concat(panel_data, ignore_index=True)
-
-        # Etiquetas temporales
         panel['periodo_relativo'] = panel['periodo'] - t0
         panel['año'] = self.config['año_inicio'] + panel['periodo'] // 4
         panel['trimestre'] = (panel['periodo'] % 4) + 1
