@@ -1,6 +1,10 @@
+import json
+import os
 import numpy as np
 import pandas as pd
+import sys
 
+from datetime import datetime
 # The expit function, also known as the logistic sigmoid function, is defined as
 # expit(x) = 1/(1+exp(-x)).
 # Es la sigmoide básicamente, le pasas cualquier número y te devuelve un valor
@@ -8,6 +12,8 @@ import pandas as pd
 from scipy.special import expit
 from typing import Dict
 
+sys.path.append('..')
+from config import DATA_DIR
 
 class PanelCreditSimulator:
     """
@@ -20,6 +26,8 @@ class PanelCreditSimulator:
 
         cupos = config['cupo_por_cohorte']
         self.cupos = cupos if isinstance(cupos, list) else [cupos] * config['n_cohortes']
+
+        self.features = config['variables']
 
         # Generar shocks agregados
         vol = config['ciclo_economico']['volatilidad_agregada']
@@ -34,7 +42,7 @@ class PanelCreditSimulator:
         self.outcomes = list(config['dinamica_outcomes'].keys())
         # Características fijas: se mantienen en todos los períodos.
         self.fixed_features = [
-            var for var in config['variables_iniciales'].keys()
+            var for var in config['variables'].keys()
             if var not in self.outcomes
         ]
 
@@ -78,7 +86,7 @@ class PanelCreditSimulator:
         # Columna "firm_id" con IDs únicos para cada empresa
         data = pd.DataFrame({'firm_id': range(n)})
 
-        for var_name, spec in self.config['variables_iniciales'].items():
+        for var_name, spec in self.config['variables'].items():
             values = self._generate_variable(spec, n)
             data[f'{var_name}_0'] = values
 
@@ -468,17 +476,28 @@ class PanelCreditSimulator:
 
         return panel
 
-    def export_panel(self, path: str, exclude_unobs: bool = True):
+    def export_panel_and_config(self, exclude_unobs: bool = True):
         if not hasattr(self, 'panel'):
             raise ValueError("Simulación no ejecutada. Llama a simulate() antes de exportar.")
 
         panel = self.panel
         if exclude_unobs:
-            unobs = ['calidad_gerencial', 'productividad_latente', 'propension_credito']
+            unobs = [var for var, spec in self.features.items() if not spec['observable']]
             cols = [c for c in panel.columns if c not in unobs]
             export_df = panel[cols]
         else:
             export_df = panel
 
-        export_df.to_csv(path, index=False)
-        print(f"Exportado: {path} ({export_df.shape})")
+        timestamp = datetime.now().strftime("%d-%m-%Y_%H:%M:%S")
+        base_path = os.path.join(DATA_DIR, f"simulacion_{timestamp}")
+        os.makedirs(base_path, exist_ok=True)
+
+        panel_path = os.path.join(base_path, f"panel.csv")
+        export_df.to_csv(panel_path, index=False)
+
+        config_path = os.path.join(base_path, f"config.json")
+        with open(config_path, 'w') as f:
+            json.dump(self.config, f, indent=4, ensure_ascii=False)
+
+        print(f"Exportado: {panel_path}")
+        print(f"Exportado: {config_path}")
