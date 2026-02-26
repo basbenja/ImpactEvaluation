@@ -465,9 +465,8 @@ class PanelCreditSimulator:
                 firms.loc[treated_now, 'cohort'] = cohort_in_period
                 firms.loc[treated_now, 'periodo_tratamiento'] = t
 
-                # Controles — solo si no son ni fueron tratados
-                new_controls = control_idx[~firms.loc[control_idx, 'ever_treated']]
-                firms.loc[new_controls, 'control'] = True
+                # Controles
+                firms.loc[control_idx, 'control'] = True
 
                 demo_msg = f", efecto demo: {demo_effect:+.3f}" if demo_effect != 0 else ""
                 print(f"  Período {t} (Cohorte {cohort_in_period}): {treated_now.sum()} tratadas (cupo: {cupo}{demo_msg})")
