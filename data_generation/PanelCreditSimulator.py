@@ -393,7 +393,7 @@ class PanelCreditSimulator:
         firms['ever_treated'] = False
         firms['cohort'] = -1
         firms['periodo_tratamiento'] = -1
-        firms['es_control'] = False
+        firms['control'] = False
 
         panel_data = []
 
