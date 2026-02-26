@@ -326,7 +326,7 @@ class PanelCreditSimulator:
         eligible: pd.Series,
         cupo: int,
         already_treated: pd.Series
-    ) -> pd.Series:
+    ) -> tuple[pd.Series, pd.Index]:
         """
         Asigna tratamiento con cupo.
 
@@ -336,6 +336,7 @@ class PanelCreditSimulator:
         Returns:
             pd.Series: Serie booleana indicando qué empresas resultan tratadas
                 en el período actual.
+            pd.Index: Índice de empresas que resultaron controles.
         """
         treated = pd.Series(False, index=firms.index)
 
@@ -344,7 +345,7 @@ class PanelCreditSimulator:
         candidates = eligible & ~already_treated
 
         if candidates.sum() == 0:
-            return treated
+            return treated, pd.Index([])
 
         candidate_idx = firms.index[candidates]
         # self.rng.random(len(candidate_idx)): genera un número entre 0 y 1 por
@@ -355,20 +356,26 @@ class PanelCreditSimulator:
         applicant_idx = candidate_idx[applies]
 
         if len(applicant_idx) == 0:
-            return treated
+            return treated, pd.Index([])
 
-        if len(applicant_idx) <= cupo:
+        # Split 50/50 aleatorio
+        shuffled = self.rng.permutation(applicant_idx)
+        mid = len(shuffled) // 2
+        treated_idx = pd.Index(shuffled[:mid])
+        control_idx = pd.Index(shuffled[mid:])
+
+        if len(treated_idx) <= cupo:
             # Si hay cupo para que todos los aplicantes entren, todos son tratados
-            treated[applicant_idx] = True
+            treated[treated_idx] = True
         else:
             # Si no hay cupo para todos, seleccionar en base a scores. El score
             # es simplemente sumar un poco de ruido al propensity para
             # introducir aleatoriedad en la selección
-            scores = propensity[applicant_idx].values + self.rng.normal(0, 0.1, len(applicant_idx))
-            selected = applicant_idx[np.argsort(-scores)[:cupo]]
+            scores = propensity[treated_idx].values + self.rng.normal(0, 0.1, len(treated_idx))
+            selected = treated_idx[np.argsort(-scores)[:cupo]]
             treated[selected] = True
 
-        return treated
+        return treated, control_idx
 
     def simulate(self) -> pd.DataFrame:
         """
@@ -386,6 +393,7 @@ class PanelCreditSimulator:
         firms['ever_treated'] = False
         firms['cohort'] = -1
         firms['periodo_tratamiento'] = -1
+        firms['es_control'] = False
 
         panel_data = []
 
@@ -447,13 +455,19 @@ class PanelCreditSimulator:
                 # Calcular propensity con efecto demostración
                 propensity = self._compute_propensity(firms, t, demo_effect=demo_effect)
 
-                treated_now = self._assign_treatment(
+                treated_now, control_idx = self._assign_treatment(
                     firms, propensity, eligible, cupo, firms['ever_treated']
                 )
 
+                # Tratados primero — tienen prioridad
+                firms.loc[treated_now, 'control'] = False
                 firms.loc[treated_now, 'ever_treated'] = True
                 firms.loc[treated_now, 'cohort'] = cohort_in_period
                 firms.loc[treated_now, 'periodo_tratamiento'] = t
+
+                # Controles — solo si no son ni fueron tratados
+                new_controls = control_idx[~firms.loc[control_idx, 'ever_treated']]
+                firms.loc[new_controls, 'control'] = True
 
                 demo_msg = f", efecto demo: {demo_effect:+.3f}" if demo_effect != 0 else ""
                 print(f"  Período {t} (Cohorte {cohort_in_period}): {treated_now.sum()} tratadas (cupo: {cupo}{demo_msg})")
@@ -462,6 +476,7 @@ class PanelCreditSimulator:
             pdata['tratado'] = firms['ever_treated'] & (firms['periodo_tratamiento'] <= t)
             pdata['cohort'] = np.where(pdata['tratado'], firms['cohort'], -1)
             pdata['elegible'] = self._check_eligibility(firms, t)
+            pdata['control'] = firms['control']
 
             panel_data.append(pdata)
 
