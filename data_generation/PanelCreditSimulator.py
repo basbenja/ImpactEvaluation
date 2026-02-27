@@ -364,18 +364,14 @@ class PanelCreditSimulator:
         treated_idx = pd.Index(shuffled[:mid])
         control_idx = pd.Index(shuffled[mid:])
 
-        if len(treated_idx) <= cupo:
-            # Si hay cupo para que todos los aplicantes entren, todos son tratados
-            treated[treated_idx] = True
-        else:
+        if len(treated_idx) > cupo:
             # Si no hay cupo para todos, seleccionar en base a scores. El score
             # es simplemente sumar un poco de ruido al propensity para
             # introducir aleatoriedad en la selección
             scores = propensity[treated_idx].values + self.rng.normal(0, 0.1, len(treated_idx))
-            selected = treated_idx[np.argsort(-scores)[:cupo]]
-            treated[selected] = True
+            treated_idx = treated_idx[np.argsort(-scores)[:cupo]]
 
-        return treated, control_idx
+        return treated_idx, control_idx
 
     def simulate(self) -> pd.DataFrame:
         """
@@ -455,21 +451,21 @@ class PanelCreditSimulator:
                 # Calcular propensity con efecto demostración
                 propensity = self._compute_propensity(firms, t, demo_effect=demo_effect)
 
-                treated_now, control_idx = self._assign_treatment(
+                treated_idx, control_idx = self._assign_treatment(
                     firms, propensity, eligible, cupo, firms['ever_treated']
                 )
 
                 # Tratados primero — tienen prioridad
-                firms.loc[treated_now, 'control'] = False
-                firms.loc[treated_now, 'ever_treated'] = True
-                firms.loc[treated_now, 'cohort'] = cohort_in_period
-                firms.loc[treated_now, 'periodo_tratamiento'] = t
+                firms.loc[treated_idx, 'control'] = False
+                firms.loc[treated_idx, 'ever_treated'] = True
+                firms.loc[treated_idx, 'cohort'] = cohort_in_period
+                firms.loc[treated_idx, 'periodo_tratamiento'] = t
 
                 # Controles
                 firms.loc[control_idx, 'control'] = True
 
                 demo_msg = f", efecto demo: {demo_effect:+.3f}" if demo_effect != 0 else ""
-                print(f"  Período {t} (Cohorte {cohort_in_period}): {treated_now.sum()} tratadas (cupo: {cupo}{demo_msg})")
+                print(f"  Período {t} (Cohorte {cohort_in_period}): {len(treated_idx)} tratadas (cupo: {cupo}{demo_msg})")
 
             # 5. Agregar estado de tratamiento
             pdata['tratado'] = firms['ever_treated'] & (firms['periodo_tratamiento'] <= t)
