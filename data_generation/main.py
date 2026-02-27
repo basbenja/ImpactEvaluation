@@ -14,15 +14,13 @@ def main():
     # Resumen
     ever_treated = panel.groupby('firm_id')['tratado'].max()
     n_treated = ever_treated.sum()
-    eligible_ever = panel.groupby('firm_id')['elegible'].max()
-    n_control = (eligible_ever & ~ever_treated).sum()
+    n_control = (panel.groupby('firm_id')['control'].max() & ~ever_treated).sum()
 
     print(f"\nESTRUCTURA DEL PANEL")
     print("=" * 70)
     print(f"Dimensiones: {panel.shape[0]:,} obs ({DATA_CONFIG['n_empresas']:,} × {DATA_CONFIG['n_periodos']} períodos)")
     print(f"Empresas tratadas: {n_treated}")
     print(f"Empresas control: {n_control}")
-    print(f"\nPeríodo programa: {DATA_CONFIG['periodo_inicio_programa']} ({panel[panel['periodo']==DATA_CONFIG['periodo_inicio_programa']]['fecha'].iloc[0]})")
 
     simulator.export_panel_and_config(exclude_unobs=True)
 

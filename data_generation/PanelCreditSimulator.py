@@ -409,9 +409,6 @@ class PanelCreditSimulator:
                 t - firms['periodo_tratamiento'],
                 -999
             )
-            pdata['periodos_post_tratamiento'] = np.where(
-                periods_since >= 0, periods_since, np.nan
-            )
 
             # 3. Evolucionar outcomes
             for outcome in self.outcomes:
@@ -470,17 +467,12 @@ class PanelCreditSimulator:
             # 5. Agregar estado de tratamiento
             pdata['tratado'] = firms['ever_treated'] & (firms['periodo_tratamiento'] <= t)
             pdata['cohort'] = np.where(pdata['tratado'], firms['cohort'], -1)
-            pdata['elegible'] = self._check_eligibility(firms, t)
             pdata['control'] = firms['control']
 
             panel_data.append(pdata)
 
         # 6. Combinar y agregar etiquetas temporales
         panel = pd.concat(panel_data, ignore_index=True)
-        panel['periodo_relativo'] = panel['periodo'] - t0
-        panel['año'] = self.config['año_inicio'] + panel['periodo'] // 4
-        panel['trimestre'] = (panel['periodo'] % 4) + 1
-        panel['fecha'] = panel['año'].astype(str) + '-Q' + panel['trimestre'].astype(str)
 
         self.panel = panel
 
