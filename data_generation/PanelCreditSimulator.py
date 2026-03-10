@@ -395,6 +395,8 @@ class PanelCreditSimulator:
 
         # 2. Simular cada período
         for t in range(n_periods):
+            # pdata = period data: DataFrame temporal para almacenar resultados del
+            # período t antes de agregarlos al panel final
             pdata = firms[['firm_id', 'empleados_0', 'salario_promedio_0']].copy()
             pdata['periodo'] = t
 
@@ -462,10 +464,13 @@ class PanelCreditSimulator:
                 firms.loc[control_idx, 'control'] = True
 
                 demo_msg = f", efecto demo: {demo_effect:+.3f}" if demo_effect != 0 else ""
-                print(f"  Período {t} (Cohorte {cohort_in_period}): {len(treated_idx)} tratadas (cupo: {cupo}{demo_msg})")
+                print(
+                    f"  Período {t} (Cohorte {cohort_in_period}): "
+                    f"{len(treated_idx)} tratadas (cupo: {cupo}{demo_msg})"
+                )
 
             # 5. Agregar estado de tratamiento
-            pdata['tratado'] = firms['ever_treated'] & (firms['periodo_tratamiento'] <= t)
+            pdata['tratado'] = firms['ever_treated']
             pdata['cohort'] = np.where(pdata['tratado'], firms['cohort'], -1)
             pdata['control'] = firms['control']
 
