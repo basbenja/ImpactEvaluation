@@ -24,7 +24,7 @@ def generate_panel(
 
     # ── 2. Asignar roles: T, C, NiNi ──────────────────────────────────
     roles = pd.DataFrame({'firm_id': firm_ids, 'firm_start': firm_start})
-    roles['tratado'] = False
+    roles['treated'] = False
     roles['control'] = False
     roles['cohort']  = -1
 
@@ -35,7 +35,7 @@ def generate_panel(
     for cohort_id, t_k in enumerate(cohort_starts):
         # Tratados de esta cohorte
         t_firms = available[idx: idx + n_treated_per_cohort]
-        roles.loc[roles['firm_id'].isin(t_firms), 'tratado'] = True
+        roles.loc[roles['firm_id'].isin(t_firms), 'treated'] = True
         roles.loc[roles['firm_id'].isin(t_firms), 'cohort']  = cohort_id
         idx += n_treated_per_cohort
 
@@ -50,7 +50,7 @@ def generate_panel(
     for _, firm in roles.iterrows():
         firm_id    = firm['firm_id']
         start      = firm['firm_start']
-        is_treated = firm['tratado']
+        is_treated = firm['treated']
         is_control = firm['control']
         cohort_id  = int(firm['cohort'])
 
@@ -76,7 +76,7 @@ def generate_panel(
                 't':       t,
                 'y_1':     round(y1, 3),
                 'y_2':     round(y2, 3),
-                'tratado': is_treated,
+                'treated': is_treated,
                 'control': is_control,
                 'cohort':  cohort_id,
             })
@@ -91,10 +91,10 @@ if __name__ == '__main__':
     print(f"Shape: {panel.shape}")
     print(f"Firms: {panel['firm_id'].nunique()}")
     print(f"\nDistribución de roles (a nivel firma):")
-    firm_status = panel.groupby('firm_id').last()[['tratado', 'control']]
-    print(f"  Tratados : {firm_status['tratado'].sum()}")
-    print(f"  Controles: {(~firm_status['tratado'] & firm_status['control']).sum()}")
-    print(f"  NiNi     : {(~firm_status['tratado'] & ~firm_status['control']).sum()}")
+    firm_status = panel.groupby('firm_id').last()[['treated', 'control']]
+    print(f"  Tratados : {firm_status['treated'].sum()}")
+    print(f"  Controles: {(~firm_status['treated'] & firm_status['control']).sum()}")
+    print(f"  NiNi     : {(~firm_status['treated'] & ~firm_status['control']).sum()}")
     print(f"\nObservaciones por firma (min/max):")
     obs_per_firm = panel.groupby('firm_id').size()
     print(f"  min: {obs_per_firm.min()} | max: {obs_per_firm.max()}")

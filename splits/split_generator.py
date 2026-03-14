@@ -36,10 +36,10 @@ class SplitGenerator:
         Determina el status definitivo de cada firma usando el último período.
         """
         last = self.panel.sort_values('t').groupby('firm_id').last()
-        status = last[['tratado', 'control', 'cohort']].reset_index()
-        status['is_T']    = status['tratado']
-        status['is_C']    = ~status['tratado'] & status['control']
-        status['is_NiNi'] = ~status['tratado'] & ~status['control']
+        status = last[['treated', 'control', 'cohort']].reset_index()
+        status['is_T']    = status['treated']
+        status['is_C']    = ~status['treated'] & status['control']
+        status['is_NiNi'] = ~status['treated'] & ~status['control']
         return status
 
     def _get_group_ids(self, group: str) -> list:
@@ -59,11 +59,6 @@ class SplitGenerator:
         firms_ids = self._status[mask]['firm_id'].values
         return [int(fid) for fid in firms_ids]
 
-    def _print_summary(self):
-        m = self.split['meta']
-        print(f"  train → T: {m['n_train_T']} | NiNi: {m['n_train_NiNi']}")
-        print(f"  test  → C: {m['n_test_C']}  | NiNi: {m['n_test_NiNi']}")
-
     def generate(self) -> dict:
         """
         Genera el split y lo almacena en self.split.
@@ -80,7 +75,7 @@ class SplitGenerator:
                 "meta": {...}
             }
         """
-        trated_ids  = self._get_group_ids(group='T')
+        treated_ids  = self._get_group_ids(group='T')
         control_ids = self._get_group_ids(group='C')
         nini_ids    = self._get_group_ids(group='NiNi')
 
@@ -91,19 +86,14 @@ class SplitGenerator:
         test_nini  = nini_ids[n_train:]
 
         self.split = {
-            'train': {'T': trated_ids, 'NiNi': train_nini},
+            'train': {'T': treated_ids, 'NiNi': train_nini},
             'test':  {'C': control_ids,  'NiNi': test_nini},
-            'meta': {
-                'train_nini_ratio': self.train_nini_ratio,
-                'seed': self.seed,
-                'n_train_T':    len(trated_ids),
-                'n_train_NiNi': len(train_nini),
-                'n_test_C':     len(control_ids),
-                'n_test_NiNi':  len(test_nini),
-            }
         }
 
-        return self.split
+        train = treated_ids + train_nini
+        test  = control_ids + test_nini
+
+        return train, test
 
     def save(self, path: str):
         """Guarda el split como JSON."""
@@ -121,4 +111,3 @@ class SplitGenerator:
         """Carga un split previamente guardado."""
         with open(path) as f:
             return json.load(f)
-
