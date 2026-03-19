@@ -1,0 +1,226 @@
+DATA_CONFIG = {
+    # -------------------------------------------------------------------------
+    # PARÁMETROS GENERALES
+    # -------------------------------------------------------------------------
+    'nombre_programa': 'Programa de Crédito Productivo PyME',
+    'n_empresas': 1000,
+    'random_seed': 2024,
+
+    # -------------------------------------------------------------------------
+    # ESTRUCTURA TEMPORAL (PANEL)
+    # -------------------------------------------------------------------------
+    'n_periodos': 12,                # Total de períodos
+    'periodo_inicio_programa': 5,    # El programa comienza en t=5
+    'frecuencia': 'trimestral',      # 'mensual', 'trimestral', 'anual'
+    'año_inicio': 2020,
+
+    # -------------------------------------------------------------------------
+    # FECHA DE CREACIÓN DE EMPRESAS
+    # -------------------------------------------------------------------------
+    # La fecha de creación se genera uniformemente entre:
+    #   - año_minimo: el año más temprano posible
+    #   - (fecha de inicio de la primera cohorte) - años_antes_primera_cohorte
+    'fecha_creacion_empresas': {
+        'año_minimo': 2000,                  # Año más temprano posible de creación
+        'años_antes_primera_cohorte': 3,     # Mínimo de años de antigüedad respecto a la primera cohorte
+    },
+
+    # -------------------------------------------------------------------------
+    # COHORTES Y CUPOS
+    # -------------------------------------------------------------------------
+    'n_cohortes': 4,
+    'cupo_por_cohorte': [80, 100, 120, 150],
+
+    # -------------------------------------------------------------------------
+    # CARACTERÍSTICAS DE LAS EMPRESAS
+    # -------------------------------------------------------------------------
+    'variables': {
+        'empleados': {
+            'distribution': 'lognormal',
+            'params': {'mean': 2.3, 'sigma': 0.9},
+            'min': 1, 'max': 500,
+            'integer': True,
+            'observable': True,
+        },
+        'salario_promedio': {
+            'distribution': 'lognormal',
+            'params': {'mean': 12.0, 'sigma': 0.3},
+            'min': 80000, 'max': 800000,
+            'observable': True,
+            'es_log': True,
+        },
+        'tiene_credito': {
+            'distribution': 'bernoulli',
+            'params': {'p': 0.30},
+            'observable': True,
+        },
+        'antiguedad': {
+            'distribution': 'exponential',
+            'params': {'scale': 8},
+            'min': 0.5, 'max': 50,
+            'observable': True,
+        },
+        'sector': {
+            'distribution': 'categorical',
+            'params': {
+                'categories': ['manufactura', 'comercio', 'servicios', 'tecnologia'],
+                'probs': [0.30, 0.35, 0.25, 0.10]
+            },
+            'observable': True,
+        },
+        'region': {
+            'distribution': 'categorical',
+            'params': {
+                'categories': ['centro', 'norte', 'sur', 'litoral'],
+                'probs': [0.45, 0.20, 0.20, 0.15]
+            },
+            'observable': True,
+        },
+        'exportadora': {
+            'distribution': 'bernoulli',
+            'params': {'p': 0.12},
+            'observable': True,
+        },
+        'ratio_formalidad': {
+            'distribution': 'beta',
+            'params': {'a': 4, 'b': 2},
+            'observable': True,
+        },
+        # Variables NO observables
+        'calidad_gerencial': {
+            'distribution': 'normal',
+            'params': {'mean': 0, 'sd': 1},
+            'observable': False,
+        },
+        'productividad_latente': {
+            'distribution': 'normal',
+            'params': {'mean': 0, 'sd': 1},
+            'observable': False,
+        },
+        'propension_credito': {
+            'distribution': 'normal',
+            'params': {'mean': 0, 'sd': 1},
+            'observable': False,
+        },
+    },
+
+    # -------------------------------------------------------------------------
+    # DINÁMICA TEMPORAL DE LOS OUTCOMES
+    # -------------------------------------------------------------------------
+    'dinamica_outcomes': {
+        'empleados': {
+            'persistencia': 0.95,
+            'tendencia_base': 0.008,
+            'volatilidad': 0.05,
+            'efecto_ciclo': 0.015,
+            'integer': True,
+            'min': 1,
+        },
+        'salario_promedio': {
+            'persistencia': 0.98,
+            'tendencia_base': 0.012,
+            'volatilidad': 0.025,
+            'efecto_ciclo': 0.008,
+            'min': 50000,
+        },
+        'tiene_credito': {
+            'persistencia': 0.90,
+            'tendencia_base': 0.01,
+            'efecto_ciclo': 0.015,
+            'es_binaria': True,
+        },
+    },
+
+    # -------------------------------------------------------------------------
+    # REGLAS DE ELEGIBILIDAD
+    # -------------------------------------------------------------------------
+    # Se deben cumplir todas las condiciones para ser elegible
+    # NOTAR que son reglas determinísticas
+    'elegibilidad': [
+        {'variable': 'empleados', 'operator': 'le', 'value': 100},
+        {'variable': 'empleados', 'operator': 'ge', 'value': 3},
+        {'variable': 'antiguedad', 'operator': 'ge', 'value': 1},
+        {'variable': 'ratio_formalidad', 'operator': 'ge', 'value': 0.5},
+    ],
+
+    # -------------------------------------------------------------------------
+    # MODELO DE SELECCIÓN
+    # -------------------------------------------------------------------------
+    'seleccion': {
+        'intercepto_base': -1.5,
+        # Coeficientes para variables al calcular la probabilidad de participar
+        # en el programa (se multiplican por la variable correspondiente)
+        'efectos_variables': {
+            'empleados': 0.008,
+            'antiguedad': 0.015,
+            'exportadora': 0.35,
+            'tiene_credito': 0.25,
+            'ratio_formalidad': 0.4,
+            'calidad_gerencial': 0.5,       # NO OBSERVABLE
+            'productividad_latente': 0.25,  # NO OBSERVABLE
+            'propension_credito': 0.6,      # NO OBSERVABLE
+        },
+        # Cómo pertencer a un sector afecta la probabilidad de participar
+        # Por ejemplo: pertenecer al sector 'comercio' reduce la probabilidad en 15%
+        'efectos_sector': {
+            'manufactura': 0.0,
+            'comercio': -0.15,
+            'servicios': -0.1,
+            'tecnologia': 0.3,
+        },
+        # Cómo la región afecta la probabilidad de participar
+        # Por ejemplo: estar en la región 'norte' reduce la probabilidad en 25%
+        'efectos_region': {
+            'centro': 0.0,
+            'norte': -0.25,
+            'sur': -0.15,
+            'litoral': -0.1,
+        },
+    },
+
+    # -------------------------------------------------------------------------
+    # EFECTO DEMOSTRACIÓN
+    # -------------------------------------------------------------------------
+    'efecto_demostracion': {
+        'activado': True,
+        'sensibilidad': 0.3,
+        'decaimiento': 0.7,
+        'ruido': 0.15,
+    },
+
+    # -------------------------------------------------------------------------
+    # EFECTOS DEL TRATAMIENTO (DINÁMICOS)
+    # -------------------------------------------------------------------------
+    'efectos_tratamiento': {
+        'empleados': {
+            'efecto_inmediato': 1.0,
+            'efecto_gradual': 0.5,
+            'efecto_maximo': 5.0,
+            'periodos_hasta_maximo': 6,
+            'heterogeneidad': {'calidad_gerencial': 0.3},
+        },
+        'salario_promedio': {
+            'efecto_inmediato': 0.015,      # 1.5% inmediato
+            'efecto_gradual': 0.008,        # 0.8% por período
+            'efecto_maximo': 0.08,          # Máximo 8%
+            'periodos_hasta_maximo': 8,
+            'heterogeneidad': {'calidad_gerencial': 0.01},
+        },
+        'tiene_credito': {
+            'efecto_inmediato': 0.30,
+            'efecto_gradual': 0.04,
+            'efecto_maximo': 0.45,
+            'periodos_hasta_maximo': 4,
+            'heterogeneidad': {'propension_credito': 0.08},
+        },
+    },
+
+    # -------------------------------------------------------------------------
+    # CICLO ECONÓMICO
+    # -------------------------------------------------------------------------
+    'ciclo_economico': {
+        'activado': True,
+        'volatilidad_agregada': 0.015,
+        'shocks_por_periodo': {},
+    },
+}
