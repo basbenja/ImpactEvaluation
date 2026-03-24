@@ -1,5 +1,4 @@
 import json
-import argparse
 import numpy as np
 import pandas as pd
 
@@ -36,7 +35,7 @@ class SplitGenerator:
         Determina el status definitivo de cada firma usando el último período.
         """
         last = self.panel.sort_values('t').groupby('firm_id').last()
-        status = last[['treated', 'control', 'cohort']].reset_index()
+        status = last[['treated', 'control']].reset_index()
         status['is_T']    = status['treated']
         status['is_C']    = ~status['treated'] & status['control']
         status['is_NiNi'] = ~status['treated'] & ~status['control']
@@ -75,7 +74,7 @@ class SplitGenerator:
                 "meta": {...}
             }
         """
-        treated_ids  = self._get_group_ids(group='T')
+        treated_ids = self._get_group_ids(group='T')
         control_ids = self._get_group_ids(group='C')
         nini_ids    = self._get_group_ids(group='NiNi')
 
@@ -87,7 +86,7 @@ class SplitGenerator:
 
         self.split = {
             'train': {'T': treated_ids, 'NiNi': train_nini},
-            'test':  {'C': control_ids,  'NiNi': test_nini},
+            'test':  {'C': control_ids, 'NiNi': test_nini},
         }
 
         train = treated_ids + train_nini

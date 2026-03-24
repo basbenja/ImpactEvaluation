@@ -37,12 +37,14 @@ def generate_panel(
         t_firms = available[idx: idx + n_treated_per_cohort]
         roles.loc[roles['firm_id'].isin(t_firms), 'treated'] = True
         roles.loc[roles['firm_id'].isin(t_firms), 'cohort']  = cohort_id
+        roles.loc[roles['firm_id'].isin(t_firms), 'cohort_start'] = t_k
         idx += n_treated_per_cohort
 
         # Controles de esta cohorte
         c_firms = available[idx: idx + n_control_per_cohort]
         roles.loc[roles['firm_id'].isin(c_firms), 'control'] = True
         roles.loc[roles['firm_id'].isin(c_firms), 'cohort']  = cohort_id
+        roles.loc[roles['firm_id'].isin(c_firms), 'cohort_start'] = t_k
         idx += n_control_per_cohort
 
     # ── 3. Generar filas del panel ─────────────────────────────────────
@@ -67,6 +69,7 @@ def generate_panel(
             y2 = y2_base + rng.normal(0, 2)   + 0.2 * t
 
             # Efecto de tratamiento post t_k (solo para tratados)
+            # t_k ya tiene tratamiento
             if is_treated and t_k is not None and t >= t_k:
                 y1 += 2.0
                 y2 += 5.0
@@ -79,6 +82,7 @@ def generate_panel(
                 'treated': is_treated,
                 'control': is_control,
                 'cohort':  cohort_id,
+                'cohort_start': t_k if t_k is not None else None
             })
 
     panel = pd.DataFrame(rows).sort_values(['firm_id', 't']).reset_index(drop=True)
