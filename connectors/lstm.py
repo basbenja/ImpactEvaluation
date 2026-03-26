@@ -31,6 +31,9 @@ class PanelSequenceDataset(Dataset):
         return len(self.records)
 
     def __getitem__(self, idx):
+        if isinstance(idx, slice):
+            return PanelSequenceDataset(self.records[idx])
+
         seq, cohort, label = self.records[idx]
         return (
             torch.tensor(seq,    dtype=torch.float32),
@@ -110,20 +113,9 @@ class LSTMConnector:
         # Si no hay datos previos, devolvemos una secuencia de ceros
         if len(pre_tr_periods) == 0:
             # Esto ocurre cuando por ejemplo la firm_id que estamos consierando
-            # nació después de t_k. En este caso, no tenemos información
+            # nació después de t_k. En este caso, no tenemos información
             # previa, así que rellenamos con ceros
             return np.zeros((t_k, len(self.feature_cols)), dtype=np.float32)
-
-        # Si hay menos períodos que t_k, hacemos padding hacia atrás con el
-        # primer valor conocido
-        # NOTE: para esto hay que ver qué hacemos, la idea sería no agregar
-        # valores ficticios, sino usar los que están disponibles. Por ejemplo,
-        # si t_k=5 pero solo hay datos hasta t=3, la secuencia sería de largo 3,
-        # no 5. Esto es importante para que el modelo aprenda a manejar
-        # secuencias de largo variable.
-        if len(pre_tr_periods) < t_k:
-            pad = np.tile(pre_tr_periods[0], (t_k - len(pre_tr_periods), 1))
-            pre_tr_periods = np.vstack([pad, pre_tr_periods])
 
         return pre_tr_periods
 

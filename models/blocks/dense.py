@@ -1,7 +1,7 @@
 import torch.nn as nn
 
 class DenseBlock(nn.Module):
-    def __init__(self, input_size, hidden_sizes, dropout):
+    def __init__(self, input_size: int, hidden_sizes: int, dropout: float):
         super(DenseBlock, self).__init__()
         backbone = []
         for hidden_size in hidden_sizes:
