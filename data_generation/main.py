@@ -4,7 +4,7 @@ from PanelCreditSimulator import PanelCreditSimulator
 def main():
     print(f"Configuración: {DATA_CONFIG['nombre_programa']}")
     print(f"  Empresas: {DATA_CONFIG['n_empresas']:,}")
-    print(f"  Períodos: {DATA_CONFIG['n_periodos']} ({DATA_CONFIG['frecuencia']})")
+    print(f"  Períodos: {DATA_CONFIG['n_periodos']}")
     print(f"  Inicio programa: Período {DATA_CONFIG['periodo_inicio_programa']}")
     print(f"  Cohortes: {DATA_CONFIG['n_cohortes']} con cupos {DATA_CONFIG['cupo_por_cohorte']}")
 

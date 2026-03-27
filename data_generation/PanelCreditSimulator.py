@@ -77,40 +77,6 @@ class PanelCreditSimulator:
 
         return values
 
-    def _compute_fecha_creacion_range(self) -> tuple:
-        """
-        Calcula el rango de fechas válidas para la creación de empresas.
-
-        Returns:
-            (fecha_min, fecha_max): Rango de fechas como pd.Timestamp.
-                - fecha_min: 1 de enero del año_minimo configurado.
-                - fecha_max: fecha de inicio de la primera cohorte menos
-                  años_antes_primera_cohorte años.
-        """
-        config = self.config
-        fc = config.get('fecha_creacion_empresas', {})
-
-        freq_map = {'mensual': 1, 'trimestral': 3, 'anual': 12}
-        meses_por_periodo = freq_map.get(config.get('frecuencia', 'trimestral'), 3)
-
-        fecha_panel_inicio = pd.Timestamp(year=config['año_inicio'], month=1, day=1)
-        meses_offset = config['periodo_inicio_programa'] * meses_por_periodo
-        fecha_primera_cohorte = fecha_panel_inicio + pd.DateOffset(months=meses_offset)
-
-        años_antes = fc.get('años_antes_primera_cohorte', 3)
-        fecha_max = fecha_primera_cohorte - pd.DateOffset(years=años_antes)
-
-        año_minimo = fc.get('año_minimo', 2000)
-        fecha_min = pd.Timestamp(year=año_minimo, month=1, day=1)
-
-        if fecha_min >= fecha_max:
-            raise ValueError(
-                f"Rango de fechas de creación inválido: fecha_min ({fecha_min.date()}) "
-                f">= fecha_max ({fecha_max.date()}). Ajustá año_minimo o años_antes_primera_cohorte."
-            )
-
-        return fecha_min, fecha_max
-
     def _generate_initial_conditions(self) -> pd.DataFrame:
         """
         Genera características iniciales (t = 0) de todas las empresas de
@@ -124,11 +90,13 @@ class PanelCreditSimulator:
             values = self._generate_variable(spec, n)
             data[f'{var_name}_0'] = values
 
-        # Fecha de creación: uniforme entre fecha_min y fecha_max
-        fecha_min, fecha_max = self._compute_fecha_creacion_range()
-        n_days = (fecha_max - fecha_min).days
-        random_days = self.rng.integers(0, n_days + 1, n)
-        data['fecha_creacion'] = fecha_min + pd.to_timedelta(random_days, unit='D')
+        # inicio_firma: período en que cada firma empieza a existir.
+        # Se sortea uniformemente entre 0 y (t0 - min_margin), garantizando
+        # que toda firma tenga al menos min_periodos_pre_programa períodos
+        # de historia antes del inicio del programa.
+        t0 = self.config['periodo_inicio_programa']
+        min_margin = self.config.get('min_periodos_pre_programa', 1)
+        data['inicio_firma'] = self.rng.integers(0, t0 - min_margin + 1, size=n)
 
         return data
 
@@ -265,7 +233,7 @@ class PanelCreditSimulator:
     def _compute_demonstration_effect(self, firms: pd.DataFrame, t: int) -> float:
         """
         Calcula efecto demostración basado en resultados observados de cohortes
-        previas. El “efecto de demostración” significa que, cuando a las empresas
+        previas. El "efecto de demostración" significa que, cuando a las empresas
         ya tratadas les va bien, eso hace que las empresas aún no tratadas estén
         más propensas a entrar al programa en las cohortes siguientes.
 
@@ -283,7 +251,7 @@ class PanelCreditSimulator:
 
         # Identificar empresas ya tratadas
         # NOTA: toma TODAS las ya tratadas, no solo las de la cohorte inmediata previa
-        treated_mask = firms['ever_treated'] & (firms['periodo_tratamiento'] < t)
+        treated_mask = firms['tratado'] & (firms['periodo_tratamiento'] < t)
 
         if not treated_mask.any():
             return 0.0  # No hay cohortes previas para observar
@@ -378,14 +346,14 @@ class PanelCreditSimulator:
                 en el período actual.
             pd.Index: Índice de empresas que resultaron controles.
         """
-        treated = pd.Series(False, index=firms.index)
+        tratado = pd.Series(False, index=firms.index)
 
         # Los candidatos son los que cumplen con las condiciones (determinísticas)
         # para participar y no han sido tratados antes
         candidates = eligible & ~already_treated
 
         if candidates.sum() == 0:
-            return treated, pd.Index([])
+            return tratado, pd.Index([])
 
         candidate_idx = firms.index[candidates]
         # self.rng.random(len(candidate_idx)): genera un número entre 0 y 1 por
@@ -396,7 +364,7 @@ class PanelCreditSimulator:
         applicant_idx = candidate_idx[applies]
 
         if len(applicant_idx) == 0:
-            return treated, pd.Index([])
+            return tratado, pd.Index([])
 
         # Split 50/50 aleatorio
         shuffled = self.rng.permutation(applicant_idx)
@@ -418,7 +386,8 @@ class PanelCreditSimulator:
         Ejecuta la simulación completa del panel.
 
         Returns:
-            DataFrame en formato long (firm_id × periodo)
+            DataFrame en formato long (firm_id × periodo), donde cada firma
+            tiene filas solo desde su inicio_firma en adelante.
         """
         n_periods = self.config['n_periodos']
         n_cohorts = self.config['n_cohortes']
@@ -426,10 +395,10 @@ class PanelCreditSimulator:
 
         # 1. Generar condiciones iniciales
         firms = self._generate_initial_conditions()
-        firms['ever_treated'] = False
-        firms['cohort'] = -1
-        firms['periodo_tratamiento'] = -1
+        firms['tratado'] = False
         firms['control'] = False
+        firms['cohorte'] = -1
+        firms['periodo_tratamiento'] = -1
 
         panel_data = []
 
@@ -437,7 +406,7 @@ class PanelCreditSimulator:
         for t in range(n_periods):
             # pdata = period data: DataFrame temporal para almacenar resultados del
             # período t antes de agregarlos al panel final
-            pdata = firms[['firm_id', 'empleados_0', 'salario_promedio_0']].copy()
+            pdata = firms[['firm_id', 'inicio_firma', 'empleados_0', 'salario_promedio_0']].copy()
             pdata['periodo'] = t
 
             # Copiar características fijas
@@ -491,13 +460,13 @@ class PanelCreditSimulator:
                 propensity = self._compute_propensity(firms, t, demo_effect=demo_effect)
 
                 treated_idx, control_idx = self._assign_treatment(
-                    firms, propensity, eligible, cupo, firms['ever_treated']
+                    firms, propensity, eligible, cupo, firms['tratado']
                 )
 
                 # Tratados primero — tienen prioridad
                 firms.loc[treated_idx, 'control'] = False
-                firms.loc[treated_idx, 'ever_treated'] = True
-                firms.loc[treated_idx, 'cohort'] = cohort_in_period
+                firms.loc[treated_idx, 'tratado'] = True
+                firms.loc[treated_idx, 'cohorte'] = cohort_in_period
                 firms.loc[treated_idx, 'periodo_tratamiento'] = t
 
                 # Controles
@@ -510,14 +479,16 @@ class PanelCreditSimulator:
                 )
 
             # 5. Agregar estado de tratamiento
-            pdata['tratado'] = firms['ever_treated']
-            pdata['cohort'] = np.where(pdata['tratado'], firms['cohort'], -1)
+            pdata['tratado'] = firms['tratado'] & (firms['periodo_tratamiento'] <= t)
+            pdata['cohorte'] = np.where(pdata['tratado'], firms['cohorte'], -1)
             pdata['control'] = firms['control']
 
             panel_data.append(pdata)
 
-        # 6. Combinar y agregar etiquetas temporales
+        # 6. Combinar y recortar: cada firma aparece solo desde su inicio_firma
         panel = pd.concat(panel_data, ignore_index=True)
+        panel = panel[panel['periodo'] >= panel['inicio_firma']].reset_index(drop=True)
+        panel = panel.sort_values(['firm_id', 'periodo']).reset_index(drop=True)
 
         self.panel = panel
 

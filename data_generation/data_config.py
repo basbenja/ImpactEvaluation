@@ -9,21 +9,9 @@ DATA_CONFIG = {
     # -------------------------------------------------------------------------
     # ESTRUCTURA TEMPORAL (PANEL)
     # -------------------------------------------------------------------------
-    'n_periodos': 12,                # Total de períodos
-    'periodo_inicio_programa': 5,    # El programa comienza en t=5
-    'frecuencia': 'trimestral',      # 'mensual', 'trimestral', 'anual'
-    'año_inicio': 2020,
-
-    # -------------------------------------------------------------------------
-    # FECHA DE CREACIÓN DE EMPRESAS
-    # -------------------------------------------------------------------------
-    # La fecha de creación se genera uniformemente entre:
-    #   - año_minimo: el año más temprano posible
-    #   - (fecha de inicio de la primera cohorte) - años_antes_primera_cohorte
-    'fecha_creacion_empresas': {
-        'año_minimo': 2000,                  # Año más temprano posible de creación
-        'años_antes_primera_cohorte': 3,     # Mínimo de años de antigüedad respecto a la primera cohorte
-    },
+    'n_periodos': 12,                 # Total de períodos
+    'periodo_inicio_programa': 5,     # El programa comienza en t=5
+    'min_periodos_pre_programa': 3,   # Mínimo de períodos que una firma existe antes del programa
 
     # -------------------------------------------------------------------------
     # COHORTES Y CUPOS
