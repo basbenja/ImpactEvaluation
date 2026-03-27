@@ -77,6 +77,40 @@ class PanelCreditSimulator:
 
         return values
 
+    def _compute_fecha_creacion_range(self) -> tuple:
+        """
+        Calcula el rango de fechas válidas para la creación de empresas.
+
+        Returns:
+            (fecha_min, fecha_max): Rango de fechas como pd.Timestamp.
+                - fecha_min: 1 de enero del año_minimo configurado.
+                - fecha_max: fecha de inicio de la primera cohorte menos
+                  años_antes_primera_cohorte años.
+        """
+        config = self.config
+        fc = config.get('fecha_creacion_empresas', {})
+
+        freq_map = {'mensual': 1, 'trimestral': 3, 'anual': 12}
+        meses_por_periodo = freq_map.get(config.get('frecuencia', 'trimestral'), 3)
+
+        fecha_panel_inicio = pd.Timestamp(year=config['año_inicio'], month=1, day=1)
+        meses_offset = config['periodo_inicio_programa'] * meses_por_periodo
+        fecha_primera_cohorte = fecha_panel_inicio + pd.DateOffset(months=meses_offset)
+
+        años_antes = fc.get('años_antes_primera_cohorte', 3)
+        fecha_max = fecha_primera_cohorte - pd.DateOffset(years=años_antes)
+
+        año_minimo = fc.get('año_minimo', 2000)
+        fecha_min = pd.Timestamp(year=año_minimo, month=1, day=1)
+
+        if fecha_min >= fecha_max:
+            raise ValueError(
+                f"Rango de fechas de creación inválido: fecha_min ({fecha_min.date()}) "
+                f">= fecha_max ({fecha_max.date()}). Ajustá año_minimo o años_antes_primera_cohorte."
+            )
+
+        return fecha_min, fecha_max
+
     def _generate_initial_conditions(self) -> pd.DataFrame:
         """
         Genera características iniciales (t = 0) de todas las empresas de
@@ -89,6 +123,12 @@ class PanelCreditSimulator:
         for var_name, spec in self.config['variables'].items():
             values = self._generate_variable(spec, n)
             data[f'{var_name}_0'] = values
+
+        # Fecha de creación: uniforme entre fecha_min y fecha_max
+        fecha_min, fecha_max = self._compute_fecha_creacion_range()
+        n_days = (fecha_max - fecha_min).days
+        random_days = self.rng.integers(0, n_days + 1, n)
+        data['fecha_creacion'] = fecha_min + pd.to_timedelta(random_days, unit='D')
 
         return data
 

@@ -15,6 +15,17 @@ DATA_CONFIG = {
     'año_inicio': 2020,
 
     # -------------------------------------------------------------------------
+    # FECHA DE CREACIÓN DE EMPRESAS
+    # -------------------------------------------------------------------------
+    # La fecha de creación se genera uniformemente entre:
+    #   - año_minimo: el año más temprano posible
+    #   - (fecha de inicio de la primera cohorte) - años_antes_primera_cohorte
+    'fecha_creacion_empresas': {
+        'año_minimo': 2000,                  # Año más temprano posible de creación
+        'años_antes_primera_cohorte': 3,     # Mínimo de años de antigüedad respecto a la primera cohorte
+    },
+
+    # -------------------------------------------------------------------------
     # COHORTES Y CUPOS
     # -------------------------------------------------------------------------
     'n_cohortes': 4,
