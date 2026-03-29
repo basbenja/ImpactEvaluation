@@ -83,8 +83,8 @@ class PanelCreditSimulator:
         acuerdo a la distribución especificada en la configuración.
         """
         n = self.config['n_empresas']
-        # Columna "firm_id" con IDs únicos para cada empresa
-        data = pd.DataFrame({'firm_id': range(n)})
+        # Columna "id_firma" con IDs únicos para cada empresa
+        data = pd.DataFrame({'id_firma': range(n)})
 
         for var_name, spec in self.config['variables'].items():
             values = self._generate_variable(spec, n)
@@ -381,12 +381,21 @@ class PanelCreditSimulator:
 
         return treated_idx, control_idx
 
+    def _order_panel_columns(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Ordena columnas del DataFrame.
+        """
+        first_cols = ['id_firma', 'inicio_firma', 't', 'tratado', 'control', 'cohorte']
+        existing_first_cols = [c for c in first_cols if c in df.columns]
+        remaining_cols = [c for c in df.columns if c not in existing_first_cols]
+        return df[existing_first_cols + remaining_cols]
+
     def simulate(self) -> pd.DataFrame:
         """
         Ejecuta la simulación completa del panel.
 
         Returns:
-            DataFrame en formato long (firm_id × periodo), donde cada firma
+            DataFrame en formato long (firma_id × t), donde cada firma
             tiene filas solo desde su inicio_firma en adelante.
         """
         n_periods = self.config['n_periodos']
@@ -406,8 +415,8 @@ class PanelCreditSimulator:
         for t in range(n_periods):
             # pdata = period data: DataFrame temporal para almacenar resultados del
             # período t antes de agregarlos al panel final
-            pdata = firms[['firm_id', 'inicio_firma', 'empleados_0', 'salario_promedio_0']].copy()
-            pdata['periodo'] = t
+            pdata = firms[['id_firma', 'inicio_firma', 'empleados_0', 'salario_promedio_0']].copy()
+            pdata['t'] = t
 
             # Copiar características fijas
             for var in self.fixed_features:
@@ -487,8 +496,9 @@ class PanelCreditSimulator:
 
         # 6. Combinar y recortar: cada firma aparece solo desde su inicio_firma
         panel = pd.concat(panel_data, ignore_index=True)
-        panel = panel[panel['periodo'] >= panel['inicio_firma']].reset_index(drop=True)
-        panel = panel.sort_values(['firm_id', 'periodo']).reset_index(drop=True)
+        panel = panel[panel['t'] >= panel['inicio_firma']].reset_index(drop=True)
+        panel = panel.sort_values(['id_firma', 't']).reset_index(drop=True)
+        panel = self._order_panel_columns(panel)
 
         self.panel = panel
 
@@ -506,7 +516,9 @@ class PanelCreditSimulator:
         else:
             export_df = panel
 
-        timestamp = datetime.now().strftime("%d-%m-%Y_%H:%M:%S")
+        export_df = self._order_panel_columns(export_df)
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         base_path = os.path.join(DATA_DIR, f"simulacion_{timestamp}")
         os.makedirs(base_path, exist_ok=True)
 

@@ -12,9 +12,9 @@ def main():
     panel = simulator.simulate()
 
     # Resumen
-    ever_treated = panel.groupby('firm_id')['tratado'].max()
-    n_treated = ever_treated.sum()
-    n_control = (panel.groupby('firm_id')['control'].max() & ~ever_treated).sum()
+    treated = panel.groupby('id_firma')['tratado'].max()
+    n_treated = treated.sum()
+    n_control = (panel.groupby('id_firma')['control'].max() & ~treated).sum()
 
     print(f"\nESTRUCTURA DEL PANEL")
     print("=" * 70)
