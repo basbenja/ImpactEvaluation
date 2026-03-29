@@ -3,6 +3,7 @@ import pandas as pd
 import torch
 
 from sklearn.preprocessing import StandardScaler
+from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import Dataset
 from typing import Optional
 
@@ -39,6 +40,28 @@ class PanelSequenceDataset(Dataset):
             torch.tensor(seq,    dtype=torch.float32),
             torch.tensor(cohort, dtype=torch.long),
             torch.tensor(label,  dtype=torch.float32),
+        )
+
+    @staticmethod
+    def collate_fn(batch):
+        """
+        batch: lista de (sequence, cohort, label)
+        """
+        sequences, cohorts, labels = zip(*batch)
+
+        # Tenemos que devolver los largo originales para que el modelo sepa hasta
+        # dónde leer (esto después se le pasa a pack_padded_sequence)
+        lengths = torch.tensor([s.shape[0] for s in sequences], dtype=torch.long)
+
+        # pad_sequence apila y rellena con 0s hasta la longitud máxima del batch
+        # sequences_padded: (batch_size, T_max, F)
+        sequences_padded = pad_sequence(sequences, batch_first=True, padding_value=0.0)
+
+        return (
+            sequences_padded,
+            lengths,
+            torch.stack(cohorts),
+            torch.stack(labels),
         )
 
 
