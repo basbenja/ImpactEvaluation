@@ -1,6 +1,10 @@
+import json
+import os
 import numpy as np
 import pandas as pd
+import sys
 
+from datetime import datetime
 # The expit function, also known as the logistic sigmoid function, is defined as
 # expit(x) = 1/(1+exp(-x)).
 # Es la sigmoide básicamente, le pasas cualquier número y te devuelve un valor
@@ -8,6 +12,8 @@ import pandas as pd
 from scipy.special import expit
 from typing import Dict
 
+sys.path.append('..')
+from config import DATA_DIR
 
 class PanelCreditSimulator:
     """
@@ -20,6 +26,8 @@ class PanelCreditSimulator:
 
         cupos = config['cupo_por_cohorte']
         self.cupos = cupos if isinstance(cupos, list) else [cupos] * config['n_cohortes']
+
+        self.features = config['variables']
 
         # Generar shocks agregados
         vol = config['ciclo_economico']['volatilidad_agregada']
@@ -34,7 +42,7 @@ class PanelCreditSimulator:
         self.outcomes = list(config['dinamica_outcomes'].keys())
         # Características fijas: se mantienen en todos los períodos.
         self.fixed_features = [
-            var for var in config['variables_iniciales'].keys()
+            var for var in config['variables'].keys()
             if var not in self.outcomes
         ]
 
@@ -75,12 +83,20 @@ class PanelCreditSimulator:
         acuerdo a la distribución especificada en la configuración.
         """
         n = self.config['n_empresas']
-        # Columna "firm_id" con IDs únicos para cada empresa
-        data = pd.DataFrame({'firm_id': range(n)})
+        # Columna "id_firma" con IDs únicos para cada empresa
+        data = pd.DataFrame({'id_firma': range(n)})
 
-        for var_name, spec in self.config['variables_iniciales'].items():
+        for var_name, spec in self.config['variables'].items():
             values = self._generate_variable(spec, n)
             data[f'{var_name}_0'] = values
+
+        # inicio_firma: período en que cada firma empieza a existir.
+        # Se sortea uniformemente entre 0 y (t0 - min_margin), garantizando
+        # que toda firma tenga al menos min_periodos_pre_programa períodos
+        # de historia antes del inicio del programa.
+        t0 = self.config['periodo_inicio_programa']
+        min_margin = self.config.get('min_periodos_pre_programa', 1)
+        data['inicio_firma'] = self.rng.integers(0, t0 - min_margin + 1, size=n)
 
         return data
 
@@ -217,7 +233,7 @@ class PanelCreditSimulator:
     def _compute_demonstration_effect(self, firms: pd.DataFrame, t: int) -> float:
         """
         Calcula efecto demostración basado en resultados observados de cohortes
-        previas. El “efecto de demostración” significa que, cuando a las empresas
+        previas. El "efecto de demostración" significa que, cuando a las empresas
         ya tratadas les va bien, eso hace que las empresas aún no tratadas estén
         más propensas a entrar al programa en las cohortes siguientes.
 
@@ -235,7 +251,7 @@ class PanelCreditSimulator:
 
         # Identificar empresas ya tratadas
         # NOTA: toma TODAS las ya tratadas, no solo las de la cohorte inmediata previa
-        treated_mask = firms['ever_treated'] & (firms['periodo_tratamiento'] < t)
+        treated_mask = firms['tratado'] & (firms['periodo_tratamiento'] < t)
 
         if not treated_mask.any():
             return 0.0  # No hay cohortes previas para observar
@@ -318,7 +334,7 @@ class PanelCreditSimulator:
         eligible: pd.Series,
         cupo: int,
         already_treated: pd.Series
-    ) -> pd.Series:
+    ) -> tuple[pd.Series, pd.Index]:
         """
         Asigna tratamiento con cupo.
 
@@ -328,15 +344,16 @@ class PanelCreditSimulator:
         Returns:
             pd.Series: Serie booleana indicando qué empresas resultan tratadas
                 en el período actual.
+            pd.Index: Índice de empresas que resultaron controles.
         """
-        treated = pd.Series(False, index=firms.index)
+        tratado = pd.Series(False, index=firms.index)
 
         # Los candidatos son los que cumplen con las condiciones (determinísticas)
         # para participar y no han sido tratados antes
         candidates = eligible & ~already_treated
 
         if candidates.sum() == 0:
-            return treated
+            return tratado, pd.Index([])
 
         candidate_idx = firms.index[candidates]
         # self.rng.random(len(candidate_idx)): genera un número entre 0 y 1 por
@@ -347,27 +364,39 @@ class PanelCreditSimulator:
         applicant_idx = candidate_idx[applies]
 
         if len(applicant_idx) == 0:
-            return treated
+            return tratado, pd.Index([])
 
-        if len(applicant_idx) <= cupo:
-            # Si hay cupo para que todos los aplicantes entren, todos son tratados
-            treated[applicant_idx] = True
-        else:
+        # Split 50/50 aleatorio
+        shuffled = self.rng.permutation(applicant_idx)
+        mid = len(shuffled) // 2
+        treated_idx = pd.Index(shuffled[:mid])
+        control_idx = pd.Index(shuffled[mid:])
+
+        if len(treated_idx) > cupo:
             # Si no hay cupo para todos, seleccionar en base a scores. El score
             # es simplemente sumar un poco de ruido al propensity para
             # introducir aleatoriedad en la selección
-            scores = propensity[applicant_idx].values + self.rng.normal(0, 0.1, len(applicant_idx))
-            selected = applicant_idx[np.argsort(-scores)[:cupo]]
-            treated[selected] = True
+            scores = propensity[treated_idx].values + self.rng.normal(0, 0.1, len(treated_idx))
+            treated_idx = treated_idx[np.argsort(-scores)[:cupo]]
 
-        return treated
+        return treated_idx, control_idx
+
+    def _order_panel_columns(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Ordena columnas del DataFrame.
+        """
+        first_cols = ['id_firma', 'inicio_firma', 't', 'tratado', 'control', 'cohorte']
+        existing_first_cols = [c for c in first_cols if c in df.columns]
+        remaining_cols = [c for c in df.columns if c not in existing_first_cols]
+        return df[existing_first_cols + remaining_cols]
 
     def simulate(self) -> pd.DataFrame:
         """
         Ejecuta la simulación completa del panel.
 
         Returns:
-            DataFrame en formato long (firm_id × periodo)
+            DataFrame en formato long (firma_id × t), donde cada firma
+            tiene filas solo desde su inicio_firma en adelante.
         """
         n_periods = self.config['n_periodos']
         n_cohorts = self.config['n_cohortes']
@@ -375,16 +404,19 @@ class PanelCreditSimulator:
 
         # 1. Generar condiciones iniciales
         firms = self._generate_initial_conditions()
-        firms['ever_treated'] = False
-        firms['cohort'] = -1
+        firms['tratado'] = False
+        firms['control'] = False
+        firms['cohorte'] = -1
         firms['periodo_tratamiento'] = -1
 
         panel_data = []
 
         # 2. Simular cada período
         for t in range(n_periods):
-            pdata = firms[['firm_id', 'empleados_0', 'salario_promedio_0']].copy()
-            pdata['periodo'] = t
+            # pdata = period data: DataFrame temporal para almacenar resultados del
+            # período t antes de agregarlos al panel final
+            pdata = firms[['id_firma', 'inicio_firma', 'empleados_0', 'salario_promedio_0']].copy()
+            pdata['t'] = t
 
             # Copiar características fijas
             for var in self.fixed_features:
@@ -396,9 +428,6 @@ class PanelCreditSimulator:
                 firms['periodo_tratamiento'] >= 0,
                 t - firms['periodo_tratamiento'],
                 -999
-            )
-            pdata['periodos_post_tratamiento'] = np.where(
-                periods_since >= 0, periods_since, np.nan
             )
 
             # 3. Evolucionar outcomes
@@ -439,46 +468,66 @@ class PanelCreditSimulator:
                 # Calcular propensity con efecto demostración
                 propensity = self._compute_propensity(firms, t, demo_effect=demo_effect)
 
-                treated_now = self._assign_treatment(
-                    firms, propensity, eligible, cupo, firms['ever_treated']
+                treated_idx, control_idx = self._assign_treatment(
+                    firms, propensity, eligible, cupo, firms['tratado']
                 )
 
-                firms.loc[treated_now, 'ever_treated'] = True
-                firms.loc[treated_now, 'cohort'] = cohort_in_period
-                firms.loc[treated_now, 'periodo_tratamiento'] = t
+                # Tratados primero — tienen prioridad
+                firms.loc[treated_idx, 'control'] = False
+                firms.loc[treated_idx, 'tratado'] = True
+                firms.loc[treated_idx, 'cohorte'] = cohort_in_period
+                firms.loc[treated_idx, 'periodo_tratamiento'] = t
+
+                # Controles
+                firms.loc[control_idx, 'control'] = True
 
                 demo_msg = f", efecto demo: {demo_effect:+.3f}" if demo_effect != 0 else ""
-                print(f"  Período {t} (Cohorte {cohort_in_period}): {treated_now.sum()} tratadas (cupo: {cupo}{demo_msg})")
+                print(
+                    f"  Período {t} (Cohorte {cohort_in_period}): "
+                    f"{len(treated_idx)} tratadas (cupo: {cupo}{demo_msg})"
+                )
 
             # 5. Agregar estado de tratamiento
-            pdata['tratado'] = firms['ever_treated'] & (firms['periodo_tratamiento'] <= t)
-            pdata['cohort'] = np.where(pdata['tratado'], firms['cohort'], -1)
-            pdata['elegible'] = self._check_eligibility(firms, t)
+            pdata['tratado'] = firms['tratado'] & (firms['periodo_tratamiento'] <= t)
+            pdata['cohorte'] = np.where(pdata['tratado'], firms['cohorte'], -1)
+            pdata['control'] = firms['control']
 
             panel_data.append(pdata)
 
-        # 6. Combinar y agregar etiquetas temporales
+        # 6. Combinar y recortar: cada firma aparece solo desde su inicio_firma
         panel = pd.concat(panel_data, ignore_index=True)
-        panel['periodo_relativo'] = panel['periodo'] - t0
-        panel['año'] = self.config['año_inicio'] + panel['periodo'] // 4
-        panel['trimestre'] = (panel['periodo'] % 4) + 1
-        panel['fecha'] = panel['año'].astype(str) + '-Q' + panel['trimestre'].astype(str)
+        panel = panel[panel['t'] >= panel['inicio_firma']].reset_index(drop=True)
+        panel = panel.sort_values(['id_firma', 't']).reset_index(drop=True)
+        panel = self._order_panel_columns(panel)
 
         self.panel = panel
 
         return panel
 
-    def export_panel(self, path: str, exclude_unobs: bool = True):
+    def export_panel_and_config(self, exclude_unobs: bool = True):
         if not hasattr(self, 'panel'):
             raise ValueError("Simulación no ejecutada. Llama a simulate() antes de exportar.")
 
         panel = self.panel
         if exclude_unobs:
-            unobs = ['calidad_gerencial', 'productividad_latente', 'propension_credito']
+            unobs = [var for var, spec in self.features.items() if not spec['observable']]
             cols = [c for c in panel.columns if c not in unobs]
             export_df = panel[cols]
         else:
             export_df = panel
 
-        export_df.to_csv(path, index=False)
-        print(f"Exportado: {path} ({export_df.shape})")
+        export_df = self._order_panel_columns(export_df)
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        base_path = os.path.join(DATA_DIR, f"simulacion_{timestamp}")
+        os.makedirs(base_path, exist_ok=True)
+
+        panel_path = os.path.join(base_path, f"panel.csv")
+        export_df.to_csv(panel_path, index=False)
+
+        config_path = os.path.join(base_path, f"config.json")
+        with open(config_path, 'w') as f:
+            json.dump(self.config, f, indent=4, ensure_ascii=False)
+
+        print(f"Exportado: {panel_path}")
+        print(f"Exportado: {config_path}")

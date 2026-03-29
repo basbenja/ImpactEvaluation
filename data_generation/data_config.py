@@ -1,9 +1,4 @@
-# =============================================================================
-#                    CONFIGURACIÓN DEL PROGRAMA DE CRÉDITO
-#                         (PANEL DE DATOS)
-# =============================================================================
-
-CONFIG = {
+DATA_CONFIG = {
     # -------------------------------------------------------------------------
     # PARÁMETROS GENERALES
     # -------------------------------------------------------------------------
@@ -14,10 +9,9 @@ CONFIG = {
     # -------------------------------------------------------------------------
     # ESTRUCTURA TEMPORAL (PANEL)
     # -------------------------------------------------------------------------
-    'n_periodos': 12,                # Total de períodos
-    'periodo_inicio_programa': 5,    # El programa comienza en t=5
-    'frecuencia': 'trimestral',      # 'mensual', 'trimestral', 'anual'
-    'año_inicio': 2020,
+    'n_periodos': 12,                 # Total de períodos
+    'periodo_inicio_programa': 5,     # El programa comienza en t=5
+    'min_periodos_pre_programa': 3,   # Mínimo de períodos que una firma existe antes del programa
 
     # -------------------------------------------------------------------------
     # COHORTES Y CUPOS
@@ -26,9 +20,9 @@ CONFIG = {
     'cupo_por_cohorte': [80, 100, 120, 150],
 
     # -------------------------------------------------------------------------
-    # CARACTERÍSTICAS INICIALES DE LAS EMPRESAS
+    # CARACTERÍSTICAS DE LAS EMPRESAS
     # -------------------------------------------------------------------------
-    'variables_iniciales': {
+    'variables': {
         'empleados': {
             'distribution': 'lognormal',
             'params': {'mean': 2.3, 'sigma': 0.9},
