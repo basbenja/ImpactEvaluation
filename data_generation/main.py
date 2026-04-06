@@ -1,5 +1,5 @@
 from data_config import DATA_CONFIG
-from PanelCreditSimulator import PanelCreditSimulator
+from data_generation.simulator import DataSimulator
 
 def main():
     print(f"Configuración: {DATA_CONFIG['nombre_programa']}")
@@ -8,7 +8,7 @@ def main():
     print(f"  Inicio programa: Período {DATA_CONFIG['periodo_inicio_programa']}")
     print(f"  Cohortes: {DATA_CONFIG['n_cohortes']} con cupos {DATA_CONFIG['cupo_por_cohorte']}")
 
-    simulator = PanelCreditSimulator(DATA_CONFIG)
+    simulator = DataSimulator(DATA_CONFIG)
     panel = simulator.simulate()
 
     # Resumen

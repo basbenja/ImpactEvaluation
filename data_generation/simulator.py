@@ -15,7 +15,7 @@ from typing import Dict
 sys.path.append('..')
 from config import DATA_DIR
 
-class PanelCreditSimulator:
+class DataSimulator:
     """
     Simulador de panel para programa de crédito empresarial.
     """
