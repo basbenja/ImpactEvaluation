@@ -41,10 +41,148 @@ class DataSimulator:
         # tenga un efecto
         self.outcomes = list(config['dinamica_outcomes'].keys())
         # Características fijas: se mantienen en todos los períodos.
+        # Haremos que sean las que no son outcomes
         self.fixed_features = [
             var for var in config['variables'].keys()
             if var not in self.outcomes
         ]
+
+    def simulate(self) -> pd.DataFrame:
+        """
+        Ejecuta la simulación completa del panel.
+
+        Returns:
+            DataFrame en formato long (firma_id × t), donde cada firma
+            tiene filas solo desde su inicio_firma en adelante.
+        """
+        n_periods = self.config['n_periodos']
+        n_cohorts = self.config['n_cohortes']
+        t0 = self.config['periodo_inicio_programa']
+
+        # 1. Generar condiciones iniciales Los valores inicial de cada una de
+        # las variables se generan según la distribución especificada en la
+        # configuración
+        firms = self._generate_initial_conditions()
+        firms['tratado'] = False
+        firms['control'] = False
+        firms['cohorte'] = -1
+        firms['periodo_tratamiento'] = -1
+
+        panel_data = []
+
+        # 2. Simular cada período
+        for t in range(n_periods):
+            # pdata = period data: DataFrame temporal para almacenar resultados del
+            # período t antes de agregarlos al panel final
+            pdata = firms[['id_firma', 'inicio_firma']].copy()
+            pdata['t'] = t
+
+            # Para las features que son fijas, copiamos el valor del período 0
+            for var in self.fixed_features:
+                if f'{var}_0' in firms.columns:
+                    pdata[var] = firms[f'{var}_0']
+
+            # Períodos desde tratamiento
+            periods_since = np.where(
+                firms['periodo_tratamiento'] >= 0,
+                t - firms['periodo_tratamiento'],
+                -999
+            )
+
+            # 3. Evolucionar outcomes
+            for outcome in self.outcomes:
+                if t == 0:
+                    new_values = firms[f'{outcome}_0'].values.copy()
+                else:
+                    prev_values = firms[f'{outcome}_{t-1}'].values
+                    te = self._compute_treatment_effect(outcome, periods_since, firms)
+                    new_values = self._evolve_outcome(firms, prev_values, outcome, t, te)
+
+                # Estos values ya tienen el efecto aplicado del tratamiento a
+                # aquellos que les corresponde
+                firms[f'{outcome}_{t}'] = new_values
+                pdata[outcome] = new_values
+
+            # 4. Asignar tratamiento si es período de cohorte
+            # t0 es el primer período de tratamiento
+            cohort_in_period = t - t0   # Indexado en 0: cohorte 0 en t0, cohorte 1 en t0+1, etc.
+            if 0 <= cohort_in_period < n_cohorts:   # Si el t actual corresponde a una cohorte
+                cupo = self.cupos[cohort_in_period]
+                # En base a los valores generados para el período actual, verificamos
+                # elegibilidad para el tratamiento en esta cohorte (condiciones
+                # determinísticas)
+                eligible = self._check_eligibility(firms, t)
+
+                # Calcular efecto demostración: cuánto afecta el desempeño de
+                # cohortes anteriores a la probabilidad de entrar al programa
+                demo_effect = self._compute_demonstration_effect(firms, t)
+
+                # Calcular propensity con efecto demostración
+                propensity = self._compute_propensity(firms, t, demo_effect=demo_effect)
+
+                treated_idx, control_idx = self._assign_treatment(
+                    firms, propensity, eligible, cupo, firms['tratado']
+                )
+
+                # Tratados primero — tienen prioridad
+                firms.loc[treated_idx, 'control'] = False
+                firms.loc[treated_idx, 'tratado'] = True
+                firms.loc[treated_idx, 'cohorte'] = cohort_in_period
+                firms.loc[treated_idx, 'periodo_tratamiento'] = t
+
+                # Controles
+                firms.loc[control_idx, 'control'] = True
+
+                demo_msg = f", efecto demo: {demo_effect:+.3f}" if demo_effect != 0 else ""
+                print(
+                    f"  Período {t} (Cohorte {cohort_in_period}): "
+                    f"{len(treated_idx)} tratadas (cupo: {cupo}{demo_msg})"
+                )
+
+            # 5. Agregar estado de tratamiento
+            pdata['tratado'] = firms['tratado'] & (firms['periodo_tratamiento'] <= t)
+            pdata['cohorte'] = np.where(pdata['tratado'], firms['cohorte'], -1)
+            pdata['control'] = firms['control']
+
+            panel_data.append(pdata)
+
+        # 6. Combinar y recortar: cada firma aparece solo desde su inicio_firma
+        panel = pd.concat(panel_data, ignore_index=True)
+        panel = panel[panel['t'] >= panel['inicio_firma']].reset_index(drop=True)
+        panel = panel.sort_values(['id_firma', 't']).reset_index(drop=True)
+        panel = self._order_panel_columns(panel)
+
+        self.panel = panel
+
+        return panel
+
+    def export_panel_and_config(self, exclude_unobs: bool = True):
+        if not hasattr(self, 'panel'):
+            raise ValueError("Simulación no ejecutada. Llama a simulate() antes de exportar.")
+
+        panel = self.panel
+        if exclude_unobs:
+            unobs = [var for var, spec in self.features.items() if not spec['observable']]
+            cols = [c for c in panel.columns if c not in unobs]
+            export_df = panel[cols]
+        else:
+            export_df = panel
+
+        export_df = self._order_panel_columns(export_df)
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        base_path = os.path.join(DATA_DIR, f"simulacion_{timestamp}")
+        os.makedirs(base_path, exist_ok=True)
+
+        panel_path = os.path.join(base_path, f"panel.csv")
+        export_df.to_csv(panel_path, index=False)
+
+        config_path = os.path.join(base_path, f"config.json")
+        with open(config_path, 'w') as f:
+            json.dump(self.config, f, indent=4, ensure_ascii=False)
+
+        print(f"Exportado: {panel_path}")
+        print(f"Exportado: {config_path}")
 
     def _generate_variable(self, spec: Dict, n: int) -> np.ndarray:
         """Genera variable según especificación."""
@@ -102,6 +240,7 @@ class DataSimulator:
 
     def _evolve_outcome(
         self,
+        firms: pd.DataFrame,
         prev_values: np.ndarray,
         outcome: str,
         t: int,
@@ -110,12 +249,12 @@ class DataSimulator:
         """
         Evoluciona un outcome de t-1 a t según el modelo dinámico.
 
-        Para continuas: Y_t = Y_{t-1} * (1 + tendencia + ciclo + shock) + efecto_tratamiento
+        Para continuas: Y_t = rho*Y_{t-1} + Σ_k [ β_k · X(i,k) ] + shock (ruido) + efecto_tratamiento
         Para binarias: P(Y_t=1) = rho*Y_{t-1} + (1-rho)*p_base + ciclo + efecto_tratamiento
 
         Args:
             prev_values: Valores en t-1
-            outcome: Nombre del outcome ('empleados', 'salario_promedio', 'tiene_credito')
+            outcome: Nombre del outcome
             t: Período actual
             treatment_effect: Efecto del tratamiento a agregar
 
@@ -123,7 +262,6 @@ class DataSimulator:
             Valores en t
         """
         dyn = self.config['dinamica_outcomes'][outcome]
-        n = len(prev_values)
 
         if dyn.get('es_binaria'):
             # Variable binaria: modelo de transición
@@ -134,27 +272,36 @@ class DataSimulator:
                 prob = prob + treatment_effect
 
             prob = np.clip(prob, 0.02, 0.98)
-            return self.rng.binomial(1, prob).astype(float)
+            new_values = self.rng.binomial(1, prob).astype(float)
 
-        # Variable continua: crecimiento porcentual
-        shock = self.rng.normal(0, dyn['volatilidad'], n)
-        cycle = dyn.get('efecto_ciclo', 0) * self.aggregate_shocks[t]
-        growth = dyn['tendencia_base'] + shock + cycle
+        else:
+            # Efecto de otras variables sobre el crecimiento
+            other_vars_effect = 0
+            for var, coef in dyn.get('efectos_variables', {}).items():
+                col = f'{var}_{t-1}' if f'{var}_{t-1}' in firms.columns else f'{var}_0'
+                if col in firms.columns:
+                    other_vars_effect += coef * firms[col].values
 
-        new_values = prev_values * (1 + growth)
+            # Variable continua: AR(1) con ruido
+            n = len(prev_values)
+            shock = self.rng.normal(0, dyn.get('volatilidad', 0), n)
+            new_values = dyn['persistencia'] * prev_values + other_vars_effect + shock
 
-        if treatment_effect is not None:
-            if outcome == 'salario_promedio':
-                # Para salario: efecto multiplicativo (porcentual)
-                new_values = new_values * (1 + treatment_effect)
-            else:
-                # Para empleados: efecto aditivo
-                new_values = new_values + treatment_effect
+            if treatment_effect is not None:
+                if dyn['efecto_tratamiento'] == 'porcentual':
+                    new_values = new_values * (1 + treatment_effect)
+                else:
+                    new_values = new_values + treatment_effect
 
-        new_values = np.maximum(new_values, dyn.get('min', 0))
+            new_values = np.maximum(new_values, dyn.get('min', 0))
 
+        # Asegurar tipos
         if dyn.get('integer'):
             new_values = np.round(new_values).astype(int)
+
+        # Asegurar rangos
+        if dyn.get('min'):
+            new_values = np.maximum(new_values, dyn['min'])
 
         return new_values
 
@@ -390,144 +537,4 @@ class DataSimulator:
         remaining_cols = [c for c in df.columns if c not in existing_first_cols]
         return df[existing_first_cols + remaining_cols]
 
-    def simulate(self) -> pd.DataFrame:
-        """
-        Ejecuta la simulación completa del panel.
-
-        Returns:
-            DataFrame en formato long (firma_id × t), donde cada firma
-            tiene filas solo desde su inicio_firma en adelante.
-        """
-        n_periods = self.config['n_periodos']
-        n_cohorts = self.config['n_cohortes']
-        t0 = self.config['periodo_inicio_programa']
-
-        # 1. Generar condiciones iniciales
-        firms = self._generate_initial_conditions()
-        firms['tratado'] = False
-        firms['control'] = False
-        firms['cohorte'] = -1
-        firms['periodo_tratamiento'] = -1
-
-        panel_data = []
-
-        # 2. Simular cada período
-        for t in range(n_periods):
-            # pdata = period data: DataFrame temporal para almacenar resultados del
-            # período t antes de agregarlos al panel final
-            pdata = firms[['id_firma', 'inicio_firma', 'empleados_0', 'salario_promedio_0']].copy()
-            pdata['t'] = t
-
-            # Copiar características fijas
-            for var in self.fixed_features:
-                if f'{var}_0' in firms.columns:
-                    pdata[var] = firms[f'{var}_0']
-
-            # Períodos desde tratamiento
-            periods_since = np.where(
-                firms['periodo_tratamiento'] >= 0,
-                t - firms['periodo_tratamiento'],
-                -999
-            )
-
-            # 3. Evolucionar outcomes
-            for outcome in self.outcomes:
-                if t == 0:
-                    values = firms[f'{outcome}_0'].values.copy()
-                else:
-                    prev = firms[f'{outcome}_{t-1}'].values
-                    te = self._compute_treatment_effect(outcome, periods_since, firms)
-                    values = self._evolve_outcome(prev, outcome, t, te)
-
-                # Asegurar tipos y rangos
-                if self.config['dinamica_outcomes'][outcome].get('integer'):
-                    values = np.round(values).astype(int)
-
-                if self.config['dinamica_outcomes'][outcome].get('min'):
-                    values = np.maximum(values, self.config['dinamica_outcomes'][outcome]['min'])
-
-                # Estos values ya tienen el efecto aplicado del tratamiento a
-                # aquellos que les corresponde
-                firms[f'{outcome}_{t}'] = values
-                pdata[outcome] = values
-
-            # 4. Asignar tratamiento si es período de cohorte
-            # t0 es el primer período de tratamiento
-            cohort_in_period = t - t0   # Indexado en 0: cohorte 0 en t0, cohorte 1 en t0+1, etc.
-            if 0 <= cohort_in_period < n_cohorts:   # Si el t actual corresponde a una cohorte
-                cupo = self.cupos[cohort_in_period]
-                # En base a los valores generados para el período actual, verificamos
-                # elegibilidad para el tratamiento en esta cohorte (condiciones
-                # determinísticas)
-                eligible = self._check_eligibility(firms, t)
-
-                # Calcular efecto demostración: cuánto afecta el desempeño de
-                # cohortes anteriores a la probabilidad de entrar al programa
-                demo_effect = self._compute_demonstration_effect(firms, t)
-
-                # Calcular propensity con efecto demostración
-                propensity = self._compute_propensity(firms, t, demo_effect=demo_effect)
-
-                treated_idx, control_idx = self._assign_treatment(
-                    firms, propensity, eligible, cupo, firms['tratado']
-                )
-
-                # Tratados primero — tienen prioridad
-                firms.loc[treated_idx, 'control'] = False
-                firms.loc[treated_idx, 'tratado'] = True
-                firms.loc[treated_idx, 'cohorte'] = cohort_in_period
-                firms.loc[treated_idx, 'periodo_tratamiento'] = t
-
-                # Controles
-                firms.loc[control_idx, 'control'] = True
-
-                demo_msg = f", efecto demo: {demo_effect:+.3f}" if demo_effect != 0 else ""
-                print(
-                    f"  Período {t} (Cohorte {cohort_in_period}): "
-                    f"{len(treated_idx)} tratadas (cupo: {cupo}{demo_msg})"
-                )
-
-            # 5. Agregar estado de tratamiento
-            pdata['tratado'] = firms['tratado'] & (firms['periodo_tratamiento'] <= t)
-            pdata['cohorte'] = np.where(pdata['tratado'], firms['cohorte'], -1)
-            pdata['control'] = firms['control']
-
-            panel_data.append(pdata)
-
-        # 6. Combinar y recortar: cada firma aparece solo desde su inicio_firma
-        panel = pd.concat(panel_data, ignore_index=True)
-        panel = panel[panel['t'] >= panel['inicio_firma']].reset_index(drop=True)
-        panel = panel.sort_values(['id_firma', 't']).reset_index(drop=True)
-        panel = self._order_panel_columns(panel)
-
-        self.panel = panel
-
-        return panel
-
-    def export_panel_and_config(self, exclude_unobs: bool = True):
-        if not hasattr(self, 'panel'):
-            raise ValueError("Simulación no ejecutada. Llama a simulate() antes de exportar.")
-
-        panel = self.panel
-        if exclude_unobs:
-            unobs = [var for var, spec in self.features.items() if not spec['observable']]
-            cols = [c for c in panel.columns if c not in unobs]
-            export_df = panel[cols]
-        else:
-            export_df = panel
-
-        export_df = self._order_panel_columns(export_df)
-
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        base_path = os.path.join(DATA_DIR, f"simulacion_{timestamp}")
-        os.makedirs(base_path, exist_ok=True)
-
-        panel_path = os.path.join(base_path, f"panel.csv")
-        export_df.to_csv(panel_path, index=False)
-
-        config_path = os.path.join(base_path, f"config.json")
-        with open(config_path, 'w') as f:
-            json.dump(self.config, f, indent=4, ensure_ascii=False)
-
-        print(f"Exportado: {panel_path}")
-        print(f"Exportado: {config_path}")
+    

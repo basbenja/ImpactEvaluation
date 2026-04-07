@@ -95,27 +95,86 @@ DATA_CONFIG = {
     # -------------------------------------------------------------------------
     # DINÁMICA TEMPORAL DE LOS OUTCOMES
     # -------------------------------------------------------------------------
+    # efectos_variables: cómo cada variable afecta la evolución de cada outcome
+    # (se multiplica por el valor de la variable). Debería haber una entrada por
+    # cada variable que NO sea outcome.
     'dinamica_outcomes': {
         'empleados': {
             'persistencia': 0.95,
-            'tendencia_base': 0.008,
             'volatilidad': 0.05,
-            'efecto_ciclo': 0.015,
             'integer': True,
             'min': 1,
+            'efecto_tratamiento': 'aditivo',
+            'efectos_variables': {
+                # Firmas más antiguas tienen estructuras de RRHH más
+                # consolidadas (+1.2 emp en LR por año de edad)
+                'antiguedad': 0.06,
+                # Exportadoras tienen demanda externa sostenida que impulsa
+                # contratación (+16 emp en LR)
+                'exportadora': 0.8,
+                # Mayor formalidad refleja capacidad institucional de crecer con
+                # personal estable (+10 emp en LR)
+                'ratio_formalidad': 0.5,
+                # Mejor gestión → mayor capacidad de coordinar equipos más
+                # grandes (+6 emp en LR por 1-sigma)
+                'calidad_gerencial': 0.3,
+                # Alta productividad latente permite escalar operaciones con más
+                # personal (+8 emp en LR)
+                'productividad_latente': 0.4,
+                # Firmas con mayor propensión al crédito invierten más y
+                # contratan (+3 emp en LR)
+                'propension_credito': 0.15,
+            }
         },
         'salario_promedio': {
             'persistencia': 0.98,
-            'tendencia_base': 0.012,
             'volatilidad': 0.025,
-            'efecto_ciclo': 0.008,
             'min': 50000,
+            'efecto_tratamiento': 'porcentual',
+            'efectos_variables': {
+                # Firmas más antiguas tienen escalafones salariales más
+                # desarrollados (LR: ~10k$ por año de edad)
+                'antiguedad': 25,
+                # Exportadoras pagan salarios premium para atraer talento con
+                # competencias internacionales (LR: ~10k$)
+                'exportadora': 200,
+                # Mayor formalidad implica cumplir convenios colectivos y pisos
+                # salariales (LR: ~5k$)
+                'ratio_formalidad': 100,
+                # Buena gestión retiene personal clave con salarios más
+                # competitivos (LR: ~4k$ por 1-sigma)
+                'calidad_gerencial': 80,
+                # Mayor productividad latente se traslada a salarios vía
+                # negociación (LR: ~5k$ por 1-sigma)
+                'productividad_latente': 100,
+                # Acceso fluido al crédito permite sostener nóminas más altas
+                # sin tensión de caja (LR: ~2.5k$)
+                'propension_credito': 50,
+            }
         },
         'tiene_credito': {
             'persistencia': 0.90,
             'tendencia_base': 0.01,
             'efecto_ciclo': 0.015,
             'es_binaria': True,
+            # NOTA: el modelo binario actual no aplica efectos_variables (ver _evolve_outcome, rama es_binaria).
+            'efectos_variables': {
+                # Firmas más antiguas tienen historial crediticio y mayor
+                # confianza bancaria
+                'antiguedad': 0.005,
+                # Exportadoras tienen flujos en divisas que facilitan el acceso
+                # al crédito formal
+                'exportadora': 0.08,
+                # Alta formalidad es requisito habitual para acceder al sistema
+                # bancario
+                'ratio_formalidad': 0.12,
+                # Buena gestión → mejores garantías y proyectos más financiables
+                'calidad_gerencial': 0.04,
+                # Productividad latente alta señaliza solvencia ante los bancos
+                'productividad_latente': 0.03,
+                # Variable construida para reflejar exactamente esta propensión
+                'propension_credito': 0.10,
+            }
         },
     },
 

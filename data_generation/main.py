@@ -1,5 +1,5 @@
 from data_config import DATA_CONFIG
-from data_generation.simulator import DataSimulator
+from simulator import DataSimulator
 
 def main():
     print(f"Configuración: {DATA_CONFIG['nombre_programa']}")
