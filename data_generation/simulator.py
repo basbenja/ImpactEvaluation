@@ -249,8 +249,7 @@ class DataSimulator:
         """
         Evoluciona un outcome de t-1 a t según el modelo dinámico.
 
-        Para continuas: Y_t = rho*Y_{t-1} + Σ_k [ β_k · X(i,k) ] + shock (ruido) + efecto_tratamiento
-        Para binarias: P(Y_t=1) = rho*Y_{t-1} + (1-rho)*p_base + ciclo + efecto_tratamiento
+        Y_t = rho*Y_{t-1} + Σ_k [ β_k · X(i,k) ] + shock (ruido) + efecto_tratamiento
 
         Args:
             prev_values: Valores en t-1
@@ -263,37 +262,25 @@ class DataSimulator:
         """
         dyn = self.config['dinamica_outcomes'][outcome]
 
-        if dyn.get('es_binaria'):
-            # Variable binaria: modelo de transición
-            prob = dyn['persistencia'] * prev_values + (1 - dyn['persistencia']) * 0.3
-            prob += dyn.get('efecto_ciclo', 0) * self.aggregate_shocks[t]
+        # Efecto de otras variables sobre el crecimiento
+        other_vars_effect = 0
+        for var, coef in dyn.get('efectos_variables', {}).items():
+            col = f'{var}_{t-1}' if f'{var}_{t-1}' in firms.columns else f'{var}_0'
+            if col in firms.columns:
+                other_vars_effect += coef * firms[col].values
 
-            if treatment_effect is not None:
-                prob = prob + treatment_effect
+        # Variable continua: AR(1) con ruido
+        n = len(prev_values)
+        shock = self.rng.normal(0, dyn.get('volatilidad', 0), n)
+        new_values = dyn['persistencia'] * prev_values + other_vars_effect + shock
 
-            prob = np.clip(prob, 0.02, 0.98)
-            new_values = self.rng.binomial(1, prob).astype(float)
+        if treatment_effect is not None:
+            if dyn['efecto_tratamiento'] == 'porcentual':
+                new_values = new_values * (1 + treatment_effect)
+            else:
+                new_values = new_values + treatment_effect
 
-        else:
-            # Efecto de otras variables sobre el crecimiento
-            other_vars_effect = 0
-            for var, coef in dyn.get('efectos_variables', {}).items():
-                col = f'{var}_{t-1}' if f'{var}_{t-1}' in firms.columns else f'{var}_0'
-                if col in firms.columns:
-                    other_vars_effect += coef * firms[col].values
-
-            # Variable continua: AR(1) con ruido
-            n = len(prev_values)
-            shock = self.rng.normal(0, dyn.get('volatilidad', 0), n)
-            new_values = dyn['persistencia'] * prev_values + other_vars_effect + shock
-
-            if treatment_effect is not None:
-                if dyn['efecto_tratamiento'] == 'porcentual':
-                    new_values = new_values * (1 + treatment_effect)
-                else:
-                    new_values = new_values + treatment_effect
-
-            new_values = np.maximum(new_values, dyn.get('min', 0))
+        new_values = np.maximum(new_values, dyn.get('min', 0))
 
         # Asegurar tipos
         if dyn.get('integer'):

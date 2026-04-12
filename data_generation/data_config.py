@@ -151,31 +151,7 @@ DATA_CONFIG = {
                 # sin tensión de caja (LR: ~2.5k$)
                 'propension_credito': 50,
             }
-        },
-        'tiene_credito': {
-            'persistencia': 0.90,
-            'tendencia_base': 0.01,
-            'efecto_ciclo': 0.015,
-            'es_binaria': True,
-            # NOTA: el modelo binario actual no aplica efectos_variables (ver _evolve_outcome, rama es_binaria).
-            'efectos_variables': {
-                # Firmas más antiguas tienen historial crediticio y mayor
-                # confianza bancaria
-                'antiguedad': 0.005,
-                # Exportadoras tienen flujos en divisas que facilitan el acceso
-                # al crédito formal
-                'exportadora': 0.08,
-                # Alta formalidad es requisito habitual para acceder al sistema
-                # bancario
-                'ratio_formalidad': 0.12,
-                # Buena gestión → mejores garantías y proyectos más financiables
-                'calidad_gerencial': 0.04,
-                # Productividad latente alta señaliza solvencia ante los bancos
-                'productividad_latente': 0.03,
-                # Variable construida para reflejar exactamente esta propensión
-                'propension_credito': 0.10,
-            }
-        },
+        }
     },
 
     # -------------------------------------------------------------------------
