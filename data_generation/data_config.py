@@ -37,11 +37,6 @@ DATA_CONFIG = {
             'observable': True,
             'es_log': True,
         },
-        'tiene_credito': {
-            'distribution': 'bernoulli',
-            'params': {'p': 0.30},
-            'observable': True,
-        },
         'antiguedad': {
             'distribution': 'exponential',
             'params': {'scale': 8},
