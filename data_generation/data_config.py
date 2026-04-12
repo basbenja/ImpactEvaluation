@@ -23,20 +23,7 @@ DATA_CONFIG = {
     # CARACTERÍSTICAS DE LAS EMPRESAS
     # -------------------------------------------------------------------------
     'variables': {
-        'empleados': {
-            'distribution': 'lognormal',
-            'params': {'mean': 2.3, 'sigma': 0.9},
-            'min': 1, 'max': 500,
-            'integer': True,
-            'observable': True,
-        },
-        'salario_promedio': {
-            'distribution': 'lognormal',
-            'params': {'mean': 12.0, 'sigma': 0.3},
-            'min': 80000, 'max': 800000,
-            'observable': True,
-            'es_log': True,
-        },
+        # Variables observables
         'antiguedad': {
             'distribution': 'exponential',
             'params': {'scale': 8},
@@ -85,6 +72,21 @@ DATA_CONFIG = {
             'params': {'mean': 0, 'sd': 1},
             'observable': False,
         },
+        # Outcomes
+        'empleados': {
+            'distribution': 'lognormal',
+            'params': {'mean': 2.3, 'sigma': 0.9},
+            'min': 1, 'max': 500,
+            'integer': True,
+            'observable': True,
+        },
+        'salario_promedio': {
+            'distribution': 'lognormal',
+            'params': {'mean': 12.0, 'sigma': 0.3},
+            'min': 80000, 'max': 800000,
+            'observable': True,
+            'es_log': True,
+        },
     },
 
     # -------------------------------------------------------------------------
@@ -104,6 +106,21 @@ DATA_CONFIG = {
                 # Firmas más antiguas tienen estructuras de RRHH más
                 # consolidadas (+1.2 emp en LR por año de edad)
                 'antiguedad': 0.06,
+                # Cómo pertencer a un sector afecta la evolución del número de
+                # empleados
+                'sector': {
+                    'manufactura': 0.0,
+                    'comercio': -0.15,
+                    'servicios': -0.1,
+                    'tecnologia': 0.3,
+                },
+                # Cómo la región afecta la evolución del número de empleados
+                'region': {
+                    'centro': 0.0,
+                    'norte': -0.25,
+                    'sur': -0.15,
+                    'litoral': -0.1,
+                },
                 # Exportadoras tienen demanda externa sostenida que impulsa
                 # contratación (+16 emp en LR)
                 'exportadora': 0.8,
@@ -127,24 +144,28 @@ DATA_CONFIG = {
             'min': 50000,
             'efecto_tratamiento': 'porcentual',
             'efectos_variables': {
-                # Firmas más antiguas tienen escalafones salariales más
-                # desarrollados (LR: ~10k$ por año de edad)
-                'antiguedad': 25,
-                # Exportadoras pagan salarios premium para atraer talento con
-                # competencias internacionales (LR: ~10k$)
-                'exportadora': 200,
-                # Mayor formalidad implica cumplir convenios colectivos y pisos
-                # salariales (LR: ~5k$)
-                'ratio_formalidad': 100,
-                # Buena gestión retiene personal clave con salarios más
-                # competitivos (LR: ~4k$ por 1-sigma)
-                'calidad_gerencial': 80,
-                # Mayor productividad latente se traslada a salarios vía
-                # negociación (LR: ~5k$ por 1-sigma)
-                'productividad_latente': 100,
-                # Acceso fluido al crédito permite sostener nóminas más altas
-                # sin tensión de caja (LR: ~2.5k$)
-                'propension_credito': 50,
+                # Por ahora, copiamos los del outcome anterior
+                'antiguedad': 0.06,
+                # Cómo pertencer a un sector afecta la evolución del número de
+                # empleados
+                'sector': {
+                    'manufactura': 0.0,
+                    'comercio': -0.15,
+                    'servicios': -0.1,
+                    'tecnologia': 0.3,
+                },
+                # Cómo la región afecta la evolución del número de empleados
+                'region': {
+                    'centro': 0.0,
+                    'norte': -0.25,
+                    'sur': -0.15,
+                    'litoral': -0.1,
+                },
+                'exportadora': 0.8,
+                'ratio_formalidad': 0.5,
+                'calidad_gerencial': 0.3,
+                'productividad_latente': 0.4,
+                'propension_credito': 0.15,
             }
         }
     },

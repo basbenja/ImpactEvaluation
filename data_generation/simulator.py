@@ -267,7 +267,12 @@ class DataSimulator:
         for var, coef in dyn.get('efectos_variables', {}).items():
             col = f'{var}_{t-1}' if f'{var}_{t-1}' in firms.columns else f'{var}_0'
             if col in firms.columns:
-                other_vars_effect += coef * firms[col].values
+                if self.config['variables'][var]['distribution'] == 'categorical':
+                    # Para variables categóricas, el efecto es por categoría
+                    for category, cat_effect in coef.items():
+                        other_vars_effect += np.where(firms[col] == category, cat_effect, 0)
+                else:
+                    other_vars_effect += coef * firms[col].values
 
         # Variable continua: AR(1) con ruido
         n = len(prev_values)
