@@ -146,15 +146,16 @@ DATA_CONFIG = {
             'efectos_variables': {
                 # Por ahora, copiamos los del outcome anterior
                 'antiguedad': 0.06,
-                # Cómo pertencer a un sector afecta la evolución del número de
-                # empleados
+                # Cómo pertencer a un sector afecta la evolución del número del
+                # salario promedio
                 'sector': {
                     'manufactura': 0.0,
                     'comercio': -0.15,
                     'servicios': -0.1,
                     'tecnologia': 0.3,
                 },
-                # Cómo la región afecta la evolución del número de empleados
+                # Cómo la región afecta la evolución del número de salario
+                # promedio
                 'region': {
                     'centro': 0.0,
                     'norte': -0.25,
