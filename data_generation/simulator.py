@@ -142,6 +142,7 @@ class DataSimulator:
             # 5. Agregar estado de tratamiento
             pdata['tratado'] = firms['tratado'] & (firms['periodo_tratamiento'] <= t)
             pdata['cohorte'] = np.where(pdata['tratado'], firms['cohorte'], -1)
+            pdata['periodo_tratamiento'] = firms['periodo_tratamiento'].values
             pdata['control'] = firms['control']
 
             panel_data.append(pdata)
@@ -524,9 +525,7 @@ class DataSimulator:
         """
         Ordena columnas del DataFrame.
         """
-        first_cols = ['id_firma', 'inicio_firma', 't', 'tratado', 'control', 'cohorte']
+        first_cols = ['id_firma', 'inicio_firma', 't', 'tratado', 'control', 'cohorte', 'periodo_tratamiento']
         existing_first_cols = [c for c in first_cols if c in df.columns]
         remaining_cols = [c for c in df.columns if c not in existing_first_cols]
         return df[existing_first_cols + remaining_cols]
-
-    

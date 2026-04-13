@@ -10,7 +10,7 @@ DATA_CONFIG = {
     # ESTRUCTURA TEMPORAL (PANEL)
     # -------------------------------------------------------------------------
     'n_periodos': 12,                 # Total de períodos
-    'periodo_inicio_programa': 5,     # El programa comienza en t=5
+    'periodo_inicio_programa': 5,     # El programa comienza en t=5 (contando desde 0)
     'min_periodos_pre_programa': 3,   # Mínimo de períodos que una firma existe antes del programa
 
     # -------------------------------------------------------------------------
