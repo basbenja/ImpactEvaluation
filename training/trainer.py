@@ -34,7 +34,6 @@ class Trainer:
                 f"val loss: {val_loss:.4f}"
             )
 
-
     def _train_step(self, loader: DataLoader) -> float:
         self.model.train()
         total_loss = 0.0
@@ -68,3 +67,20 @@ class Trainer:
 
         # average loss per batch
         return total_loss / len(loader)
+
+    def accuracy(self, loader: DataLoader, threshold: float = 0.5) -> float:
+        self.model.eval()
+        correct = 0
+        total   = 0
+
+        with torch.no_grad():
+            for *X, y in loader:
+                X = [x.to(self.device) for x in X]
+                y = y.to(self.device)
+
+                logits = self.model(*X).squeeze(1)
+                preds  = (torch.sigmoid(logits) >= threshold).float()
+                correct += (preds == y).sum().item()
+                total   += y.size(0)
+
+        return correct / total
