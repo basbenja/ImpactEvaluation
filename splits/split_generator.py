@@ -34,11 +34,11 @@ class SplitGenerator:
         """
         Determina el status definitivo de cada firma usando el último período.
         """
-        last = self.panel.sort_values('t').groupby('firm_id').last()
-        status = last[['treated', 'control']].reset_index()
-        status['is_T']    = status['treated']
-        status['is_C']    = ~status['treated'] & status['control']
-        status['is_NiNi'] = ~status['treated'] & ~status['control']
+        last = self.panel.sort_values('t').groupby('id_firma').last()
+        status = last[['tratado', 'control']].reset_index()
+        status['is_T']    = status['tratado']
+        status['is_C']    = ~status['tratado'] & status['control']
+        status['is_NiNi'] = ~status['tratado'] & ~status['control']
         return status
 
     def _get_group_ids(self, group: str) -> list:
@@ -55,7 +55,7 @@ class SplitGenerator:
         elif group == 'NiNi':
             mask = self._status['is_NiNi']
 
-        firms_ids = self._status[mask]['firm_id'].values
+        firms_ids = self._status[mask]['id_firma'].values
         return [int(fid) for fid in firms_ids]
 
     def generate(self) -> dict:
