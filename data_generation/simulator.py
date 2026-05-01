@@ -442,8 +442,6 @@ class DataSimulator:
             't',
             'tratado_en_t',
             'control_en_t',
-            'cohorte',
-            'periodo_tratamiento'
         ]
         existing_first_cols = [c for c in first_cols if c in df.columns]
         remaining_cols = [c for c in df.columns if c not in existing_first_cols]
@@ -537,8 +535,6 @@ class DataSimulator:
 
             # 5. Agregar estado de tratamiento
             pdata['tratado_en_t'] = firms['periodo_tratamiento'] == t
-            pdata['cohorte'] = np.where(pdata['tratado_en_t'], firms['cohorte'], -1)
-            pdata['periodo_tratamiento'] = firms['periodo_tratamiento'].values
             pdata['control_en_t'] = control_this_period
 
             panel_data.append(pdata)
@@ -547,6 +543,12 @@ class DataSimulator:
         panel = pd.concat(panel_data, ignore_index=True)
         panel = panel[panel['t'] >= panel['inicio_firma']].reset_index(drop=True)
         panel = panel.sort_values(['id_firma', 't']).reset_index(drop=True)
+
+        # 7. Firmas que fueron control en cohorte previa y luego se trataron:
+        # pierden condición de control en todos sus períodos
+        treated_ids = firms.loc[firms['tratado'], 'id_firma'].values
+        panel.loc[panel['id_firma'].isin(treated_ids), 'control_en_t'] = False
+
         panel = self._order_panel_columns(panel)
 
         self.panel = panel
