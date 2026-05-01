@@ -5,15 +5,14 @@ import pandas as pd
 import sys
 
 from datetime import datetime
-# The expit function, also known as the logistic sigmoid function, is defined as
-# expit(x) = 1/(1+exp(-x)).
-# Es la sigmoide básicamente, le pasas cualquier número y te devuelve un valor
-# entre 0 y 1, imitando una probabilidad.
-from scipy.special import expit
+from pandera.typing import DataFrame as PanderaDataFrame
+from scipy.special import expit     # logit
 from typing import Dict
 
 sys.path.append('..')
 from config import DATA_DIR
+
+from panel_schema import PanelSchema
 
 class DataSimulator:
     """
@@ -447,7 +446,7 @@ class DataSimulator:
         remaining_cols = [c for c in df.columns if c not in existing_first_cols]
         return df[existing_first_cols + remaining_cols]
 
-    def simulate(self) -> pd.DataFrame:
+    def simulate(self) -> PanderaDataFrame[PanelSchema]:
         """
         Ejecuta la simulación completa del panel.
 
@@ -551,6 +550,6 @@ class DataSimulator:
 
         panel = self._order_panel_columns(panel)
 
+        PanelSchema.validate(panel)
         self.panel = panel
-
         return panel
