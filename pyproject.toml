@@ -11,6 +11,7 @@ dependencies = [
     "optuna>=4.8.0",
     "optuna-dashboard>=0.20.0",
     "pandas>=3.0.1",
+    "pandera>=0.31.1",
     "scikit-learn>=1.8.0",
     "scipy>=1.17.1",
     "torch>=2.10.0",
