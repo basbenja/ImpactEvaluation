@@ -105,6 +105,9 @@ class LSTMConnector:
         self._cohorts_periods = sorted(
             self.panel.loc[self.panel[Col.TRATADO_EN_T], Col.T].unique().tolist()
         )
+        self._period_to_cohort_id = {
+            period: idx for idx, period in enumerate(self._cohorts_periods)
+        }
 
     def _build_sequence(self, firm_id: int, t_k: int) -> np.ndarray:
         """
@@ -140,14 +143,15 @@ class LSTMConnector:
         for firm_id in self.split['train']['T']:
             firm = self._firms[firm_id]
             cohort_period = int(firm.loc[firm[Col.TRATADO_EN_T], Col.T].iloc[0])
+            cohort_id = self._period_to_cohort_id[cohort_period]
             seq = self._build_sequence(firm_id, cohort_period)
-            records.append((firm_id, seq, cohort_period, 1))
+            records.append((firm_id, seq, cohort_id, 1))
 
         # NiNis — repetidos por cohorte
         for firm_id in self.split['train']['NiNi']:
-            for cohort_period in self._cohorts_periods:
+            for cohort_id, cohort_period in enumerate(self._cohorts_periods):
                 seq = self._build_sequence(firm_id, cohort_period)
-                records.append((firm_id, seq, cohort_period, 0))
+                records.append((firm_id, seq, cohort_id, 0))
 
         return records
 
@@ -164,16 +168,17 @@ class LSTMConnector:
         for firm_id in self.split['test']['C']:
             firm = self._firms[firm_id]
             real_cohort_period = int(firm.loc[firm[Col.CONTROL_EN_T], Col.T].iloc[0])
-            for cohort_period in self._cohorts_periods:
+            real_cohort_id = self._period_to_cohort_id[real_cohort_period]
+            for cohort_id, cohort_period in enumerate(self._cohorts_periods):
                 seq   = self._build_sequence(firm_id, cohort_period)
-                label = 1 if cohort_period == real_cohort_period else 0
-                records.append((firm_id, seq, cohort_period, label))
+                label = 1 if cohort_id == real_cohort_id else 0
+                records.append((firm_id, seq, cohort_id, label))
 
         # NiNis — repetidos por cohorte
         for firm_id in self.split['test']['NiNi']:
-            for cohort_period in self._cohorts_periods:
+            for cohort_id, cohort_period in enumerate(self._cohorts_periods):
                 seq = self._build_sequence(firm_id, cohort_period)
-                records.append((firm_id, seq, cohort_period, 0))
+                records.append((firm_id, seq, cohort_id, 0))
 
         return records
 
