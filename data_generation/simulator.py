@@ -12,7 +12,7 @@ from typing import Dict
 sys.path.append('..')
 from config import DATA_DIR
 
-from panel_schema import PanelSchema
+from data_generation.panel_schema import PanelSchema
 
 class DataSimulator:
     """
