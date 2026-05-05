@@ -2,6 +2,8 @@ import json
 import numpy as np
 import pandas as pd
 
+from data_generation.panel_utils import get_treated_ids, get_control_ids, get_nini_ids
+
 
 class SplitGenerator:
     """
@@ -27,36 +29,20 @@ class SplitGenerator:
         self.seed = seed
         self.rng = np.random.default_rng(seed)
 
-        self._status = self._get_firm_status()
         self.split = None
 
-    def _get_firm_status(self) -> pd.DataFrame:
-        """
-        Determina el status definitivo de cada firma usando el último período.
-        """
-        last = self.panel.sort_values('t').groupby('id_firma').last()
-        status = last[['tratado', 'control']].reset_index()
-        status['is_T']    = status['tratado']
-        status['is_C']    = ~status['tratado'] & status['control']
-        status['is_NiNi'] = ~status['tratado'] & ~status['control']
-        return status
-
-    def _get_group_ids(self, group: str) -> list:
-        """
-        Obtiene los firm_ids de T o C.
-
-        Returns:
-            [id1, id2, ...]
-        """
-        if group == 'T':
-            mask = self._status['is_T']
-        elif group == 'C':
-            mask = self._status['is_C']
-        elif group == 'NiNi':
-            mask = self._status['is_NiNi']
-
-        firms_ids = self._status[mask]['id_firma'].values
-        return [int(fid) for fid in firms_ids]
+    def _validate_groups(
+        self,
+        treated_ids: list[int],
+        control_ids: list[int],
+        nini_ids: list[int],
+    ) -> None:
+        """Raises if any firm appears in more than one group."""
+        T, C, N = set(treated_ids), set(control_ids), set(nini_ids)
+        overlaps = {'T∩C': T & C, 'T∩NiNi': T & N, 'C∩NiNi': C & N}
+        found = {k: v for k, v in overlaps.items() if v}
+        if found:
+            raise ValueError(f"Groups not mutually exclusive: {found}")
 
     def generate(self) -> dict:
         """
@@ -74,9 +60,11 @@ class SplitGenerator:
                 "meta": {...}
             }
         """
-        treated_ids = self._get_group_ids(group='T')
-        control_ids = self._get_group_ids(group='C')
-        nini_ids    = self._get_group_ids(group='NiNi')
+        treated_ids = get_treated_ids(self.panel)
+        control_ids = get_control_ids(self.panel)
+        nini_ids    = get_nini_ids(self.panel)
+
+        self._validate_groups(treated_ids, control_ids, nini_ids)
 
         # NiNi shuffleados y partidos
         self.rng.shuffle(nini_ids)
