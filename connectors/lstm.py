@@ -23,10 +23,10 @@ class PanelSequenceDataset(Dataset):
         - label: tensor escalar (float). 1 si es tratado/control, 0 si es NiNi
     """
 
-    def __init__(self, records: list[tuple[np.ndarray, int, int]]):
+    def __init__(self, records: list[tuple[int, np.ndarray, int, int]]):
         """
         Args:
-            records: lista de (secuencia, cohorte, label)
+            records: lista de (firm_id, secuencia, cohorte, label)
         """
         self.records = records
 
@@ -37,11 +37,12 @@ class PanelSequenceDataset(Dataset):
         if isinstance(idx, slice):
             return PanelSequenceDataset(self.records[idx])
 
-        seq, cohort, label = self.records[idx]
+        firm_id, seq, cohort, label = self.records[idx]
         return (
-            torch.tensor(seq,    dtype=torch.float32),
-            torch.tensor(cohort, dtype=torch.long),
-            torch.tensor(label,  dtype=torch.float32),
+            torch.tensor(firm_id, dtype=torch.long),
+            torch.tensor(seq,     dtype=torch.float32),
+            torch.tensor(cohort,  dtype=torch.long),
+            torch.tensor(label,   dtype=torch.float32),
         )
 
     @staticmethod
@@ -49,7 +50,7 @@ class PanelSequenceDataset(Dataset):
         """
         batch: lista de (sequence, cohort, label)
         """
-        sequences, cohorts, labels = zip(*batch)
+        firm_ids, sequences, cohorts, labels = zip(*batch)
 
         # Tenemos que devolver los largo originales para que el modelo sepa hasta
         # dónde leer (esto después se le pasa a pack_padded_sequence)
@@ -60,6 +61,7 @@ class PanelSequenceDataset(Dataset):
         sequences_padded = pad_sequence(sequences, batch_first=True, padding_value=0.0)
 
         return (
+            torch.stack(firm_ids),
             sequences_padded,
             lengths,
             torch.stack(cohorts),
@@ -139,13 +141,13 @@ class LSTMConnector:
             firm = self._firms[firm_id]
             cohort_period = int(firm.loc[firm[Col.TRATADO_EN_T], Col.T].iloc[0])
             seq = self._build_sequence(firm_id, cohort_period)
-            records.append((seq, cohort_period, 1))
+            records.append((firm_id, seq, cohort_period, 1))
 
         # NiNis — repetidos por cohorte
         for firm_id in self.split['train']['NiNi']:
             for cohort_period in self._cohorts_periods:
                 seq = self._build_sequence(firm_id, cohort_period)
-                records.append((seq, cohort_period, 0))
+                records.append((firm_id, seq, cohort_period, 0))
 
         return records
 
@@ -165,13 +167,13 @@ class LSTMConnector:
             for cohort_period in self._cohorts_periods:
                 seq   = self._build_sequence(firm_id, cohort_period)
                 label = 1 if cohort_period == real_cohort_period else 0
-                records.append((seq, cohort_period, label))
+                records.append((firm_id, seq, cohort_period, label))
 
         # NiNis — repetidos por cohorte
         for firm_id in self.split['test']['NiNi']:
             for cohort_period in self._cohorts_periods:
                 seq = self._build_sequence(firm_id, cohort_period)
-                records.append((seq, cohort_period, 0))
+                records.append((firm_id, seq, cohort_period, 0))
 
         return records
 
@@ -180,7 +182,7 @@ class LSTMConnector:
         records: list[tuple[np.ndarray, int, int]]
     ) -> StandardScaler:
         """Fittea el scaler aplanando todas las secuencias de train."""
-        flat = np.vstack([seq for seq, _, _ in records])
+        flat = np.vstack([seq for _, seq, _, _ in records])
         scaler = StandardScaler()
         scaler.fit(flat)
         return scaler
@@ -191,8 +193,8 @@ class LSTMConnector:
     ) -> list[tuple[np.ndarray, int, int]]:
         """Aplica el scaler a todas las secuencias."""
         return [
-            (self.scaler.transform(seq), cohort, label)
-            for seq, cohort, label in records
+            (firm_id, self.scaler.transform(seq), cohort, label)
+            for firm_id, seq, cohort, label in records
         ]
 
     def convert(
