@@ -7,6 +7,8 @@ from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import Dataset
 from typing import Optional
 
+from data_generation.panel_schema import Col
+
 
 class PanelSequenceDataset(Dataset):
     """
@@ -72,17 +74,15 @@ class LSTMConnector:
     Args:
         panel        : DataFrame en formato long
         split        : dict generado por SplitGenerator
-        feature_cols : columnas a usar como features; si es None se
-            detectan automáticamente
+        feature_cols : columnas a usar como features
     """
-
     def __init__(
         self,
         panel: pd.DataFrame,
         split: dict,
         feature_cols: list[str]
     ):
-        self.panel = panel.sort_values(['firm_id', 't']).reset_index(drop=True)
+        self.panel = panel
         self.split = split
         self.scaler: Optional[StandardScaler] = None
 
@@ -97,27 +97,11 @@ class LSTMConnector:
 
         # Índice para acceso rápido por firma
         self._firms = {
-            fid: df for fid, df in self.panel.groupby('firm_id')
+            fid: df for fid, df in self.panel.groupby(Col.ID_FIRMA)
         }
 
-        # Período de inicio de cada cohorte: {cohort_id: t_k}
-        self._cohort_periods = self._get_cohort_periods()
-
-        # Lista de todas las cohortes
-        self._cohorts = sorted(self._cohort_periods.keys())
-
-    def _get_cohort_periods(self) -> dict[int, int]:
-        """
-        Infiere el período de inicio de cada cohorte desde el split.
-        t_k es el primer t en que aparece un tratado de esa cohorte
-        con label treated=True.
-        """
-        treated = self.panel[self.panel['treated']]
-        return (
-            treated.groupby('cohort')['cohort_start']
-            .min()
-            .astype(int)
-            .to_dict()
+        self._cohorts_periods = sorted(
+            self.panel.loc[self.panel[Col.TRATADO_EN_T], Col.T].unique().tolist()
         )
 
     def _build_sequence(self, firm_id: int, t_k: int) -> np.ndarray:
@@ -153,17 +137,15 @@ class LSTMConnector:
         # Tratados
         for firm_id in self.split['train']['T']:
             firm = self._firms[firm_id]
-            cohort_id = firm['cohort'].iloc[0]
-            t_k = self._cohort_periods[cohort_id]
-            seq = self._build_sequence(firm_id, t_k)
-            records.append((seq, cohort_id, 1))
+            cohort_period = int(firm.loc[firm[Col.TRATADO_EN_T], Col.T].iloc[0])
+            seq = self._build_sequence(firm_id, cohort_period)
+            records.append((seq, cohort_period, 1))
 
         # NiNis — repetidos por cohorte
         for firm_id in self.split['train']['NiNi']:
-            for cohort_id in self._cohorts:
-                t_k = self._cohort_periods[cohort_id]
-                seq = self._build_sequence(firm_id, t_k)
-                records.append((seq, cohort_id, 0))
+            for cohort_period in self._cohorts_periods:
+                seq = self._build_sequence(firm_id, cohort_period)
+                records.append((seq, cohort_period, 0))
 
         return records
 
@@ -178,19 +160,18 @@ class LSTMConnector:
 
         # Controles — repetidos por cohorte
         for firm_id in self.split['test']['C']:
-            real_cohort_id = self._firms[firm_id]['cohort'].iloc[0]
-            for cohort_id in self._cohorts:
-                t_k   = self._cohort_periods[cohort_id]
-                seq   = self._build_sequence(firm_id, t_k)
-                label = 1 if cohort_id == real_cohort_id else 0
-                records.append((seq, cohort_id, label))
+            firm = self._firms[firm_id]
+            real_cohort_period = int(firm.loc[firm[Col.CONTROL_EN_T], Col.T].iloc[0])
+            for cohort_period in self._cohorts_periods:
+                seq   = self._build_sequence(firm_id, cohort_period)
+                label = 1 if cohort_period == real_cohort_period else 0
+                records.append((seq, cohort_period, label))
 
         # NiNis — repetidos por cohorte
         for firm_id in self.split['test']['NiNi']:
-            for cohort_id in self._cohorts:
-                t_k = self._cohort_periods[cohort_id]
-                seq = self._build_sequence(firm_id, t_k)
-                records.append((seq, cohort_id, 0))
+            for cohort_period in self._cohorts_periods:
+                seq = self._build_sequence(firm_id, cohort_period)
+                records.append((seq, cohort_period, 0))
 
         return records
 
