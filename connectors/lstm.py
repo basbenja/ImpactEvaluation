@@ -4,11 +4,12 @@ import pandas as pd
 from sklearn.preprocessing import StandardScaler
 from typing import Optional
 
+from connectors.base import BaseConnector, Record
 from data_generation.panel_schema import Col
 from datasets.panel_sequence import PanelSequenceDataset
 
 
-class LSTMConnector:
+class LSTMConnector(BaseConnector):
     """
     Conector que transforma el panel + split en Datasets de PyTorch.
 
@@ -70,7 +71,7 @@ class LSTMConnector:
 
         return pre_tr_periods
 
-    def build_train_records(self) -> list[tuple[np.ndarray, int, int]]:
+    def build_train_records(self) -> list[Record]:
         """
         Train:
             - Tratados: 1 obs por firma con su cohorte real, label=1
@@ -94,7 +95,7 @@ class LSTMConnector:
 
         return records
 
-    def build_test_records(self) -> list[tuple[np.ndarray, int, int]]:
+    def build_test_records(self) -> list[Record]:
         """
         Test:
             - Controles: 1 obs por firma por cohorte. label=1 para su
@@ -123,7 +124,7 @@ class LSTMConnector:
 
     def fit_scaler(
         self,
-        records: list[tuple[np.ndarray, int, int]]
+        records: list[Record]
     ) -> StandardScaler:
         """Fittea el scaler aplanando todas las secuencias de train."""
         flat = np.vstack([seq for _, seq, _, _ in records])
@@ -133,9 +134,9 @@ class LSTMConnector:
 
     def scale_records(
         self,
-        records: list[tuple[np.ndarray, int, int]],
+        records: list[Record],
         scaler: StandardScaler,
-    ) -> list[tuple[np.ndarray, int, int]]:
+    ) -> list[Record]:
         """Aplica el scaler a todas las secuencias."""
         return [
             (firm_id, scaler.transform(seq), cohort, label)
