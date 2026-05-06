@@ -32,12 +32,16 @@ class LSTMClassifier(nn.Module):
 
     def forward(
         self,
+        firm_ids: torch.Tensor,
         x_seq: torch.Tensor,
         lengths: torch.Tensor,
         cohorts: torch.Tensor
     ) -> torch.Tensor:
         """
         Args:
+            firm_ids: (batch_size,).
+                Enteros con el id de la firma. No se usan en el modelo pero se
+                incluyen para poder trackear los resultados por firma.
             x_seq: (batch_size, seq_len, n_features).
                 Secuencia de características con el padding aplicado para poder
                 manejar secuencias de longitud variable.

@@ -10,7 +10,7 @@ DATA_CONFIG = {
     # ESTRUCTURA TEMPORAL (PANEL)
     # -------------------------------------------------------------------------
     'n_periodos': 12,                 # Total de períodos
-    'periodo_inicio_programa': 5,     # El programa comienza en t=5
+    'periodo_inicio_programa': 5,     # El programa comienza en t=5 (contando desde 0)
     'min_periodos_pre_programa': 3,   # Mínimo de períodos que una firma existe antes del programa
 
     # -------------------------------------------------------------------------
@@ -23,25 +23,7 @@ DATA_CONFIG = {
     # CARACTERÍSTICAS DE LAS EMPRESAS
     # -------------------------------------------------------------------------
     'variables': {
-        'empleados': {
-            'distribution': 'lognormal',
-            'params': {'mean': 2.3, 'sigma': 0.9},
-            'min': 1, 'max': 500,
-            'integer': True,
-            'observable': True,
-        },
-        'salario_promedio': {
-            'distribution': 'lognormal',
-            'params': {'mean': 12.0, 'sigma': 0.3},
-            'min': 80000, 'max': 800000,
-            'observable': True,
-            'es_log': True,
-        },
-        'tiene_credito': {
-            'distribution': 'bernoulli',
-            'params': {'p': 0.30},
-            'observable': True,
-        },
+        # Variables observables
         'antiguedad': {
             'distribution': 'exponential',
             'params': {'scale': 8},
@@ -90,33 +72,103 @@ DATA_CONFIG = {
             'params': {'mean': 0, 'sd': 1},
             'observable': False,
         },
+        # Outcomes
+        'empleados': {
+            'distribution': 'lognormal',
+            'params': {'mean': 2.3, 'sigma': 0.9},
+            'min': 1, 'max': 500,
+            'integer': True,
+            'observable': True,
+        },
+        'salario_promedio': {
+            'distribution': 'lognormal',
+            'params': {'mean': 12.0, 'sigma': 0.3},
+            'min': 80000, 'max': 800000,
+            'observable': True,
+            'es_log': True,
+        },
     },
 
     # -------------------------------------------------------------------------
     # DINÁMICA TEMPORAL DE LOS OUTCOMES
     # -------------------------------------------------------------------------
+    # efectos_variables: cómo cada variable afecta la evolución de cada outcome
+    # (se multiplica por el valor de la variable). Debería haber una entrada por
+    # cada variable que NO sea outcome.
     'dinamica_outcomes': {
         'empleados': {
             'persistencia': 0.95,
-            'tendencia_base': 0.008,
             'volatilidad': 0.05,
-            'efecto_ciclo': 0.015,
             'integer': True,
             'min': 1,
+            'efecto_tratamiento': 'aditivo',
+            'efectos_variables': {
+                # Firmas más antiguas tienen estructuras de RRHH más
+                # consolidadas (+1.2 emp en LR por año de edad)
+                'antiguedad': 0.06,
+                # Cómo pertencer a un sector afecta la evolución del número de
+                # empleados
+                'sector': {
+                    'manufactura': 0.0,
+                    'comercio': -0.15,
+                    'servicios': -0.1,
+                    'tecnologia': 0.3,
+                },
+                # Cómo la región afecta la evolución del número de empleados
+                'region': {
+                    'centro': 0.0,
+                    'norte': -0.25,
+                    'sur': -0.15,
+                    'litoral': -0.1,
+                },
+                # Exportadoras tienen demanda externa sostenida que impulsa
+                # contratación (+16 emp en LR)
+                'exportadora': 0.8,
+                # Mayor formalidad refleja capacidad institucional de crecer con
+                # personal estable (+10 emp en LR)
+                'ratio_formalidad': 0.5,
+                # Mejor gestión → mayor capacidad de coordinar equipos más
+                # grandes (+6 emp en LR por 1-sigma)
+                'calidad_gerencial': 0.3,
+                # Alta productividad latente permite escalar operaciones con más
+                # personal (+8 emp en LR)
+                'productividad_latente': 0.4,
+                # Firmas con mayor propensión al crédito invierten más y
+                # contratan (+3 emp en LR)
+                'propension_credito': 0.15,
+            }
         },
         'salario_promedio': {
             'persistencia': 0.98,
-            'tendencia_base': 0.012,
             'volatilidad': 0.025,
-            'efecto_ciclo': 0.008,
             'min': 50000,
-        },
-        'tiene_credito': {
-            'persistencia': 0.90,
-            'tendencia_base': 0.01,
-            'efecto_ciclo': 0.015,
-            'es_binaria': True,
-        },
+            'efecto_tratamiento': 'porcentual',
+            'efectos_variables': {
+                # Por ahora, copiamos los del outcome anterior
+                'antiguedad': 0.06,
+                # Cómo pertencer a un sector afecta la evolución del número del
+                # salario promedio
+                'sector': {
+                    'manufactura': 0.0,
+                    'comercio': -0.15,
+                    'servicios': -0.1,
+                    'tecnologia': 0.3,
+                },
+                # Cómo la región afecta la evolución del número de salario
+                # promedio
+                'region': {
+                    'centro': 0.0,
+                    'norte': -0.25,
+                    'sur': -0.15,
+                    'litoral': -0.1,
+                },
+                'exportadora': 0.8,
+                'ratio_formalidad': 0.5,
+                'calidad_gerencial': 0.3,
+                'productividad_latente': 0.4,
+                'propension_credito': 0.15,
+            }
+        }
     },
 
     # -------------------------------------------------------------------------
