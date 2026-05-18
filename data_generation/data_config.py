@@ -84,8 +84,7 @@ DATA_CONFIG = {
             'distribution': 'lognormal',
             'params': {'mean': 12.0, 'sigma': 0.3},
             'min': 80000, 'max': 800000,
-            'observable': True,
-            'es_log': True,
+            'observable': True
         },
     },
 
@@ -260,7 +259,8 @@ DATA_CONFIG = {
     # -------------------------------------------------------------------------
     'ciclo_economico': {
         'activado': True,
-        'volatilidad_agregada': 0.015,
+        'persistencia': 0.7,
+        'volatilidad': 0.015,
         'shocks_por_periodo': {},
     },
 }
