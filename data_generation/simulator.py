@@ -139,7 +139,7 @@ class DataSimulator:
         """
         Evoluciona un outcome de t-1 a t según el modelo dinámico.
 
-        Y_t = rho*Y_{t-1} + Σ_k [ β_k · X(i,k) ] + shock (ruido) + efecto_tratamiento
+        Y_t = rho*Y_{t-1} + Σ_k [ β_k · X(i,k) ] + volatilidad + efecto_tratamiento
 
         Args:
             prev_values: Valores en t-1
@@ -152,7 +152,11 @@ class DataSimulator:
         """
         dyn = self.config['dinamica_outcomes'][outcome]
 
-        # Efecto de otras variables sobre el crecimiento
+        # Efecto fijo propio de un individuo: igual en todos los períodos de
+        # tiempo, pero distinto por individuo.
+        # Está capturado por las otras variables (observables y no observables)
+        # que no son outcomes, las cuales se mantienen fijas en el tiempo y
+        # varían entre individuos
         other_vars_effect = 0
         for var, coef in dyn.get('efectos_variables', {}).items():
             col = f'{var}_{t-1}' if f'{var}_{t-1}' in firms.columns else f'{var}_0'
@@ -164,10 +168,10 @@ class DataSimulator:
                 else:
                     other_vars_effect += coef * firms[col].values
 
-        # Variable continua: AR(1) con ruido
+        # Variable continua: AR(1) con volatilidad
         n = len(prev_values)
-        shock = self.rng.normal(0, dyn.get('volatilidad', 0), n)
-        new_values = dyn['persistencia'] * prev_values + other_vars_effect + shock
+        error = self.rng.normal(0, dyn.get('volatilidad', 0), n)
+        new_values = dyn['persistencia'] * prev_values + other_vars_effect + error
 
         if treatment_effect is not None:
             if dyn['efecto_tratamiento'] == 'porcentual':
