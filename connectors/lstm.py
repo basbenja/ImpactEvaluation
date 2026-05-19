@@ -1,75 +1,15 @@
 import numpy as np
 import pandas as pd
-import torch
 
 from sklearn.preprocessing import StandardScaler
-from torch.nn.utils.rnn import pad_sequence
-from torch.utils.data import Dataset
 from typing import Optional
 
+from connectors.base import BaseConnector, Record
 from data_generation.panel_schema import Col
+from datasets.panel_sequence import PanelSequenceDataset
 
 
-class PanelSequenceDataset(Dataset):
-    """
-    Dataset de PyTorch para secuencias de panel.
-
-    Cada item es una tupla (sequence, cohort, label) donde:
-        - sequence : tensor (T_k, F), donde T_k es el número de períodos
-            pre-tratemiento y F es el número de features (esta forma es la que
-            espera una LSTM por ejemplo)
-        - cohort: tensor escalar (int), representa la cohorte asignada al
-            item
-        - label: tensor escalar (float). 1 si es tratado/control, 0 si es NiNi
-    """
-
-    def __init__(self, records: list[tuple[int, np.ndarray, int, int]]):
-        """
-        Args:
-            records: lista de (firm_id, secuencia, cohorte, label)
-        """
-        self.records = records
-
-    def __len__(self):
-        return len(self.records)
-
-    def __getitem__(self, idx):
-        if isinstance(idx, slice):
-            return PanelSequenceDataset(self.records[idx])
-
-        firm_id, seq, cohort, label = self.records[idx]
-        return (
-            torch.tensor(firm_id, dtype=torch.long),
-            torch.tensor(seq,     dtype=torch.float32),
-            torch.tensor(cohort,  dtype=torch.long),
-            torch.tensor(label,   dtype=torch.float32),
-        )
-
-    @staticmethod
-    def collate_fn(batch):
-        """
-        batch: lista de (sequence, cohort, label)
-        """
-        firm_ids, sequences, cohorts, labels = zip(*batch)
-
-        # Tenemos que devolver los largo originales para que el modelo sepa hasta
-        # dónde leer (esto después se le pasa a pack_padded_sequence)
-        lengths = torch.tensor([s.shape[0] for s in sequences], dtype=torch.long)
-
-        # pad_sequence apila y rellena con 0s hasta la longitud máxima del batch
-        # sequences_padded: (batch_size, T_max, F)
-        sequences_padded = pad_sequence(sequences, batch_first=True, padding_value=0.0)
-
-        return (
-            torch.stack(firm_ids),
-            sequences_padded,
-            lengths,
-            torch.stack(cohorts),
-            torch.stack(labels),
-        )
-
-
-class LSTMConnector:
+class LSTMConnector(BaseConnector):
     """
     Conector que transforma el panel + split en Datasets de PyTorch.
 
@@ -131,7 +71,7 @@ class LSTMConnector:
 
         return pre_tr_periods
 
-    def _build_train(self) -> list[tuple[np.ndarray, int, int]]:
+    def build_train_records(self) -> list[Record]:
         """
         Train:
             - Tratados: 1 obs por firma con su cohorte real, label=1
@@ -155,7 +95,7 @@ class LSTMConnector:
 
         return records
 
-    def _build_test(self) -> list[tuple[np.ndarray, int, int]]:
+    def build_test_records(self) -> list[Record]:
         """
         Test:
             - Controles: 1 obs por firma por cohorte. label=1 para su
@@ -182,9 +122,9 @@ class LSTMConnector:
 
         return records
 
-    def _fit_scaler(
+    def fit_scaler(
         self,
-        records: list[tuple[np.ndarray, int, int]]
+        records: list[Record]
     ) -> StandardScaler:
         """Fittea el scaler aplanando todas las secuencias de train."""
         flat = np.vstack([seq for _, seq, _, _ in records])
@@ -192,13 +132,14 @@ class LSTMConnector:
         scaler.fit(flat)
         return scaler
 
-    def _scale_records(
+    def scale_records(
         self,
-        records: list[tuple[np.ndarray, int, int]]
-    ) -> list[tuple[np.ndarray, int, int]]:
+        records: list[Record],
+        scaler: StandardScaler,
+    ) -> list[Record]:
         """Aplica el scaler a todas las secuencias."""
         return [
-            (firm_id, self.scaler.transform(seq), cohort, label)
+            (firm_id, scaler.transform(seq), cohort, label)
             for firm_id, seq, cohort, label in records
         ]
 
@@ -211,15 +152,13 @@ class LSTMConnector:
         Returns:
             (train_dataset, test_dataset)
         """
-        train_records = self._build_train()
-        test_records  = self._build_test()
+        train_records = self.build_train_records()
+        test_records  = self.build_test_records()
 
         if fit_scaler:
-            # Fittear scaler solo con secuencias de train
-            self.scaler = self._fit_scaler(train_records)
-
-            train_records = self._scale_records(train_records)
-            test_records  = self._scale_records(test_records)
+            self.scaler = self.fit_scaler(train_records)
+            train_records = self.scale_records(train_records, self.scaler)
+            test_records  = self.scale_records(test_records, self.scaler)
 
         return (
             PanelSequenceDataset(train_records),

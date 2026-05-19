@@ -84,32 +84,31 @@ DATA_CONFIG = {
             'distribution': 'lognormal',
             'params': {'mean': 12.0, 'sigma': 0.3},
             'min': 80000, 'max': 800000,
-            'observable': True,
-            'es_log': True,
+            'observable': True
         },
     },
 
     # -------------------------------------------------------------------------
     # DINÁMICA TEMPORAL DE LOS OUTCOMES
     # -------------------------------------------------------------------------
-    # efectos_variables: cómo cada variable afecta la evolución de cada outcome
-    # (se multiplica por el valor de la variable). Debería haber una entrada por
-    # cada variable que NO sea outcome.
+    # Cómo cada variable afecta la evolución de cada outcome (se multiplica por
+    # el valor de la variable). Debería haber una entrada por cada variable que
+    # NO sea outcome.
     'dinamica_outcomes': {
         'empleados': {
             'persistencia': 0.95,
-            'volatilidad': 0.05,
+            'volatilidad': 3,
             'integer': True,
             'min': 1,
             'efecto_tratamiento': 'aditivo',
             'efectos_variables': {
                 # Firmas más antiguas tienen estructuras de RRHH más
                 # consolidadas (+1.2 emp en LR por año de edad)
-                'antiguedad': 0.06,
+                'antiguedad': 0.8,
                 # Cómo pertencer a un sector afecta la evolución del número de
                 # empleados
                 'sector': {
-                    'manufactura': 0.0,
+                    'manufactura': 0.4,
                     'comercio': -0.15,
                     'servicios': -0.1,
                     'tecnologia': 0.3,
@@ -260,7 +259,8 @@ DATA_CONFIG = {
     # -------------------------------------------------------------------------
     'ciclo_economico': {
         'activado': True,
-        'volatilidad_agregada': 0.015,
+        'persistencia': 0.7,
+        'volatilidad': 0.015,
         'shocks_por_periodo': {},
     },
 }

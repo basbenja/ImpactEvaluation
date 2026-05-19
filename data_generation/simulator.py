@@ -28,11 +28,16 @@ class DataSimulator:
 
         self.features = config['variables']
 
-        # Generar shocks agregados
-        vol = config['ciclo_economico']['volatilidad_agregada']
-        # Distribución normal con media 0 y desviación vol
-        # Un shock por cada período
-        self.aggregate_shocks = self.rng.normal(0, vol, config['n_periodos'])
+        # Generar shocks agregados a través de un proceso AR(1)
+        rho = config['ciclo_economico']['persistencia']
+        vol = config['ciclo_economico']['volatilidad']
+        # Un proceso AR(1) estacionario tiene varianza σ²/(1-ρ²)
+        var_estacionaria = (vol**2) / (1 - rho**2)
+        shocks = np.zeros(config['n_periodos'])
+        shocks[0] = self.rng.normal(0, np.sqrt(var_estacionaria))
+        for t in range(1, config['n_periodos']):
+            shocks[t] = rho * shocks[t-1] + self.rng.normal(0, vol)
+        self.aggregate_shocks = shocks
 
         self.treatment_history = {}
 
@@ -139,7 +144,7 @@ class DataSimulator:
         """
         Evoluciona un outcome de t-1 a t según el modelo dinámico.
 
-        Y_t = rho*Y_{t-1} + Σ_k [ β_k · X(i,k) ] + shock (ruido) + efecto_tratamiento
+        Y_t = rho*Y_{t-1} + Σ_k [ β_k · X(i,k) ] + volatilidad + efecto_tratamiento
 
         Args:
             prev_values: Valores en t-1
@@ -152,23 +157,39 @@ class DataSimulator:
         """
         dyn = self.config['dinamica_outcomes'][outcome]
 
-        # Efecto de otras variables sobre el crecimiento
-        other_vars_effect = 0
+        # ── 1. EFECTOS FIJOS ────────────────────────────────────────────────────────
+        # Capturan heterogeneidad individual constante en el tiempo.
+        # Se descomponen en variables observables (y no observables) que no son
+        # outcomes, se mantienen fijas en el tiempo y varían entre individuos.
+        fixed_effects = 0
         for var, coef in dyn.get('efectos_variables', {}).items():
             col = f'{var}_{t-1}' if f'{var}_{t-1}' in firms.columns else f'{var}_0'
             if col in firms.columns:
                 if self.config['variables'][var]['distribution'] == 'categorical':
-                    # Para variables categóricas, el efecto es por categoría
                     for category, cat_effect in coef.items():
-                        other_vars_effect += np.where(firms[col] == category, cat_effect, 0)
+                        fixed_effects += np.where(firms[col] == category, cat_effect, 0)
                 else:
-                    other_vars_effect += coef * firms[col].values
+                    fixed_effects += coef * firms[col].values
 
-        # Variable continua: AR(1) con ruido
+        # ── 2. EFECTOS TEMPORALES ─────────────────────────────────────────────
+        # Capturan shocks agregados que afectan a todas las empresas por igual
+        # en cada período. Siguen un proceso AR(1) con persistencia macro.
         n = len(prev_values)
-        shock = self.rng.normal(0, dyn.get('volatilidad', 0), n)
-        new_values = dyn['persistencia'] * prev_values + other_vars_effect + shock
+        time_effects = 0
+        ciclo = self.config.get('ciclo_economico', {})
+        if ciclo.get('activado', False):
+            time_effects = self.aggregate_shocks[t]
 
+        # ── 3. VOLATILIDAD / ERROR ────────────────────────────────────────────
+        # Perturbación idiosincrática de cada empresa en cada período.
+        # Variación continua y simétrica alrededor de la trayectoria esperada.
+        error = self.rng.normal(0, dyn.get('volatilidad', 0), n)
+
+        # ── Evolución del outcome ─────────────────────────────────────────────
+        # Y_it = ρ·Y_i,t-1 + α_i + λ_t + ε_it
+        new_values = dyn['persistencia'] * prev_values + fixed_effects + time_effects + error
+
+        # ── 4. EFECTO DEL TRATAMIENTO ─────────────────────────────────────────
         if treatment_effect is not None:
             if dyn['efecto_tratamiento'] == 'porcentual':
                 new_values = new_values * (1 + treatment_effect)

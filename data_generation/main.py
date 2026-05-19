@@ -12,15 +12,18 @@ def main():
     panel = simulator.simulate()
 
     # Resumen
-    treated = panel.groupby('id_firma')['tratado'].max()
-    n_treated = treated.sum()
-    n_control = (panel.groupby('id_firma')['control'].max() & ~treated).sum()
+    treated_ids = set(panel.loc[panel['tratado_en_t'], 'id_firma'])
+    control_ids = set(panel.loc[panel['control_en_t'], 'id_firma']) - treated_ids
+    n_treated = len(treated_ids)
+    n_control = len(control_ids)
+    n_nini = DATA_CONFIG['n_empresas'] - n_treated - n_control
 
     print(f"\nESTRUCTURA DEL PANEL")
     print("=" * 70)
     print(f"Dimensiones: {panel.shape[0]:,} obs ({DATA_CONFIG['n_empresas']:,} × {DATA_CONFIG['n_periodos']} períodos)")
     print(f"Empresas tratadas: {n_treated}")
-    print(f"Empresas control: {n_control}")
+    print(f"Empresas control:  {n_control}")
+    print(f"Empresas NiNi:     {n_nini}")
 
     simulator.export_panel_and_config(exclude_unobs=True)
 
