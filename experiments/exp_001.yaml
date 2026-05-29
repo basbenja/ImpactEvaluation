@@ -1,0 +1,46 @@
+experiment:
+  name: large_panel
+  seed: 42
+
+data:
+  n_empresas: 5000
+  n_periodos: 20
+  n_cohortes: 4
+  cupo_por_cohorte: [400, 500, 600, 750]
+  random_seed: 2024
+
+features:
+  - antiguedad
+  - ratio_formalidad
+  - empleados
+  - salario_promedio
+  - exportadora
+  - sector
+  - region
+
+split:
+  train_nini_ratio: 0.5
+  seed: 13
+
+model:
+  lstm_hidden_size: 128
+  lstm_num_layers: 3
+  dropout: 0.3
+
+training:
+  optimizer: Adam
+  learning_rate: 1.0e-3
+  n_epochs: 20
+  batch_size: 64
+
+optuna:
+  n_trials: 100
+  search_space:
+    learning_rate: [1.0e-4, 1.0e-3, 1.0e-2]
+    dropout: [0.2, 0.3, 0.5]
+    lstm_hidden_size: [64, 128, 256]
+    lstm_num_layers: [2, 3, 4]
+
+output:
+  dir: runs/
+  save_model: true
