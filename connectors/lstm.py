@@ -16,7 +16,12 @@ class LSTMConnector(BaseConnector):
     Args:
         panel        : DataFrame en formato long
         split        : dict generado por SplitGenerator
-        feature_cols : columnas a usar como features
+        feature_cols : columnas a usar como features (int/float, bool, o categorical)
+
+    Encoding:
+        - int/float  → StandardScaler
+        - bool       → cast a float32, sin escalar
+        - categorical (object) → one-hot (pd.get_dummies), sin escalar
     """
     def __init__(
         self,
@@ -24,18 +29,13 @@ class LSTMConnector(BaseConnector):
         split: dict,
         feature_cols: list[str]
     ):
-        self.panel = panel
         self.split = split
         self.scaler: Optional[StandardScaler] = None
 
-        if any(col not in panel.columns for col in feature_cols):
-            raise ValueError(
-                "Alguna(s) columna(s) de feature no se encuentran en el panel. "
-                f"Columnas del panel: {panel.columns.tolist()}, columnas de "
-                f"feature: {feature_cols}"
-            )
-
-        self.feature_cols = feature_cols
+        preprocessed = self.preprocess_panel(panel, feature_cols)
+        self.panel       = preprocessed.panel
+        self.feature_cols = preprocessed.feature_cols
+        self._n_numeric  = preprocessed.n_numeric
 
         # Índice para acceso rápido por firma
         self._firms = {
@@ -126,8 +126,8 @@ class LSTMConnector(BaseConnector):
         self,
         records: list[Record]
     ) -> StandardScaler:
-        """Fittea el scaler aplanando todas las secuencias de train."""
-        flat = np.vstack([seq for _, seq, _, _ in records])
+        """Fittea el scaler solo sobre las columnas numéricas."""
+        flat = np.vstack([seq[:, :self._n_numeric] for _, seq, _, _ in records])
         scaler = StandardScaler()
         scaler.fit(flat)
         return scaler
@@ -137,11 +137,13 @@ class LSTMConnector(BaseConnector):
         records: list[Record],
         scaler: StandardScaler,
     ) -> list[Record]:
-        """Aplica el scaler a todas las secuencias."""
-        return [
-            (firm_id, scaler.transform(seq), cohort, label)
-            for firm_id, seq, cohort, label in records
-        ]
+        """Escala columnas numéricas; indicadoras y dummies pasan sin cambios."""
+        scaled = []
+        for firm_id, seq, cohort, label in records:
+            numeric  = scaler.transform(seq[:, :self._n_numeric])
+            indicators = seq[:, self._n_numeric:]
+            scaled.append((firm_id, np.concatenate([numeric, indicators], axis=1), cohort, label))
+        return scaled
 
     def convert(
         self, fit_scaler: bool = True
