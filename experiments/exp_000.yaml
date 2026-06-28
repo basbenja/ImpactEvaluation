@@ -1,5 +1,5 @@
 experiment:
-  name: baseline
+  name: exp_000
   seed: 42
 
 data:
@@ -34,6 +34,8 @@ training:
   batch_size: 32
 
 optuna:
+  metric: f1
+  direction: maximize
   n_trials: 50
   search_space:
     learning_rate: [1.0e-4, 1.0e-3, 1.0e-2]
