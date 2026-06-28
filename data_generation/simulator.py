@@ -364,6 +364,31 @@ class DataSimulator:
 
         return total_effect
 
+    def _compute_outcome_trend(self, firms: pd.DataFrame, t: int) -> np.ndarray:
+        """
+        Calcula el efecto de la tendencia pre-tratamiento de los outcomes sobre
+        el propensity score. Firmas con mayor crecimiento reciente tienen mayor
+        probabilidad de participar.
+
+        Returns:
+            Array de shape (n,) con el efecto aditivo sobre el logit.
+        """
+        sel = self.config['seleccion']
+        n = len(firms)
+        trend_effect = np.zeros(n)
+
+        for outcome, spec in sel.get('historial_outcomes', {}).items():
+            t_start = max(0, t - spec['ventana'])
+            col_now  = f'{outcome}_{t}'
+            col_past = f'{outcome}_{t_start}'
+            if col_now in firms.columns and col_past in firms.columns:
+                y_now  = firms[col_now].values
+                y_past = firms[col_past].values
+                trend  = (y_now - y_past) / (np.abs(y_past) + 1)
+                trend_effect += spec['coeficiente'] * trend
+
+        return trend_effect
+
     def _compute_propensity(
         self,
         firms: pd.DataFrame,
@@ -402,7 +427,11 @@ class DataSimulator:
             for region, effect in sel.get('efectos_region', {}).items():
                 z[firms['region_0'] == region] += effect
 
-        z = np.clip(z, -10, 10)  # Evitar overflow
+        z = z + self._compute_outcome_trend(firms, t)
+
+        # Evitar overflow porque este valor es el que se pasa a la función
+        # sigmoide (expit)
+        z = np.clip(z, -10, 10)
         return pd.Series(expit(z), index=firms.index)
 
     def _assign_treatment(
