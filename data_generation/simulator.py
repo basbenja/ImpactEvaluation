@@ -137,10 +137,11 @@ class DataSimulator:
         self,
         firms: pd.DataFrame,
         prev_values: np.ndarray,
+        prev_values_cf: np.ndarray,
         outcome: str,
         t: int,
         treatment_effect: np.ndarray = None
-    ) -> np.ndarray:
+    ) -> tuple[np.ndarray, np.ndarray]:
         """
         Evoluciona un outcome de t-1 a t según el modelo dinámico.
 
@@ -148,6 +149,7 @@ class DataSimulator:
 
         Args:
             prev_values: Valores en t-1
+            prev_values_cf: Valores contrafactuales en t-1
             outcome: Nombre del outcome
             t: Período actual
             treatment_effect: Efecto del tratamiento a agregar
@@ -185,28 +187,33 @@ class DataSimulator:
         # Variación continua y simétrica alrededor de la trayectoria esperada.
         error = self.rng.normal(0, dyn.get('volatilidad', 0), n)
 
-        # ── Evolución del outcome ─────────────────────────────────────────────
+        # ── Evolución del outcome y su contrafactual ──────────────────────────
         # Y_it = ρ·Y_i,t-1 + α_i + λ_t + ε_it
-        new_values = dyn['persistencia'] * prev_values + fixed_effects + time_effects + error
+        base_obs = dyn['persistencia'] * prev_values + fixed_effects + time_effects + error
+        base_cf  = dyn['persistencia'] * prev_values_cf + fixed_effects + time_effects + error
 
         # ── 4. EFECTO DEL TRATAMIENTO ─────────────────────────────────────────
+        new_obs = base_obs.copy()
         if treatment_effect is not None:
             if dyn['efecto_tratamiento'] == 'porcentual':
-                new_values = new_values * (1 + treatment_effect)
+                new_obs = new_obs * (1 + treatment_effect)
             else:
-                new_values = new_values + treatment_effect
+                new_obs = new_obs + treatment_effect
 
-        new_values = np.maximum(new_values, dyn.get('min', 0))
+        new_obs = np.maximum(new_obs, dyn.get('min', 0))
 
-        # Asegurar tipos
-        if dyn.get('integer'):
-            new_values = np.round(new_values).astype(int)
+        # ── 5. CONTRAFACTUAL ─────────────────────────────────────────
+        new_cf = base_cf.copy()
 
-        # Asegurar rangos
-        if dyn.get('min'):
-            new_values = np.maximum(new_values, dyn['min'])
+        for values in [new_obs, new_cf]:
+            # Asegurar rangos
+            if dyn.get('min'):
+                values = np.maximum(values, dyn['min'])
+            # Asegurar tipos
+            if dyn.get('integer'):
+                values = np.round(values).astype(int)
 
-        return new_values
+        return new_obs, new_cf
 
     def _compute_treatment_effect(
         self,
@@ -357,6 +364,31 @@ class DataSimulator:
 
         return total_effect
 
+    def _compute_outcome_trend(self, firms: pd.DataFrame, t: int) -> np.ndarray:
+        """
+        Calcula el efecto de la tendencia pre-tratamiento de los outcomes sobre
+        el propensity score. Firmas con mayor crecimiento reciente tienen mayor
+        probabilidad de participar.
+
+        Returns:
+            Array de shape (n,) con el efecto aditivo sobre el logit.
+        """
+        sel = self.config['seleccion']
+        n = len(firms)
+        trend_effect = np.zeros(n)
+
+        for outcome, spec in sel.get('historial_outcomes', {}).items():
+            t_start = max(0, t - spec['ventana'])
+            col_now  = f'{outcome}_{t}'
+            col_past = f'{outcome}_{t_start}'
+            if col_now in firms.columns and col_past in firms.columns:
+                y_now  = firms[col_now].values
+                y_past = firms[col_past].values
+                trend  = (y_now - y_past) / (np.abs(y_past) + 1)
+                trend_effect += spec['coeficiente'] * trend
+
+        return trend_effect
+
     def _compute_propensity(
         self,
         firms: pd.DataFrame,
@@ -395,7 +427,11 @@ class DataSimulator:
             for region, effect in sel.get('efectos_region', {}).items():
                 z[firms['region_0'] == region] += effect
 
-        z = np.clip(z, -10, 10)  # Evitar overflow
+        z = z + self._compute_outcome_trend(firms, t)
+
+        # Evitar overflow porque este valor es el que se pasa a la función
+        # sigmoide (expit)
+        z = np.clip(z, -10, 10)
         return pd.Series(expit(z), index=firms.index)
 
     def _assign_treatment(
@@ -479,9 +515,12 @@ class DataSimulator:
         n_cohorts = self.config['n_cohortes']
         t0 = self.config['periodo_inicio_programa']
 
-        # 1. Generar condiciones iniciales Los valores inicial de cada una de
-        # las variables se generan según la distribución especificada en la
-        # configuración
+        # 1. Generar condiciones iniciales
+        # Los valores inicial de cada una de las variables se generan según la
+        # distribución especificada en la configuración
+        # firms tiene una fila por empresa, y una columna por variable en el
+        # tiempo. O sea, las columnas son: id_firma, inicio_firma, var1_0,
+        # var2_0, ..., varN_0
         firms = self._generate_initial_conditions()
         firms['tratado'] = False
         firms['cohorte'] = -1
@@ -505,17 +544,30 @@ class DataSimulator:
             # 3. Evolucionar outcomes
             for outcome in self.outcomes:
                 if t == 0:
-                    new_values = firms[f'{outcome}_0'].values.copy()
+                    new_obs = firms[f'{outcome}_0'].values.copy()
+                    new_cf  = new_obs.copy()
                 else:
-                    prev_values = firms[f'{outcome}_{t-1}'].values
-                    te = self._compute_treatment_effect(t, outcome, firms)
-                    new_values = self._evolve_outcome(firms, prev_values, outcome, t, te)
+                    prev_obs = firms[f'{outcome}_{t-1}'].values
+                    prev_cf  = firms[f'{outcome}_cf_{t-1}'].values
 
-                # Estos values ya tienen el efecto aplicado del tratamiento a
-                # aquellos que les corresponde
-                pdata[outcome] = new_values
+                    te = self._compute_treatment_effect(t, outcome, firms)
+                    new_obs, new_cf = self._evolve_outcome(
+                        firms, prev_obs, prev_cf, outcome, t, te
+                    )
+
+                # new_obs tiene el efecto del tratamiento para firmas que fueron
+                # eleigdas para ser tratadas en algún período anterior. Las que
+                # se tratan en este período (tratado_en_t=True) aún no son
+                # afectadas — el efecto inicia en t+1 (ver paso 4).
+                pdata[outcome] = new_obs
                 # Agregamos una columna más a firms
-                firms[f'{outcome}_{t}'] = new_values
+                firms[f'{outcome}_{t}'] = new_obs
+
+                # Valores del contrafactual. Notar que van a ser iguales hasta que
+                # la firma sea tratada.
+                pdata[f'{outcome}_cf'] = new_cf
+                # Agregamos una columna más a firms
+                firms[f'{outcome}_cf_{t}'] = new_cf
 
             # 4. Asignar tratamiento si es período de cohorte
             # t0 es el primer período de tratamiento

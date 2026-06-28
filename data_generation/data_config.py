@@ -215,6 +215,12 @@ DATA_CONFIG = {
             'sur': -0.15,
             'litoral': -0.1,
         },
+        # Efecto de la tendencia pre-tratamiento de los outcomes sobre el propensity.
+        # Firmas con mayor crecimiento reciente son más propensas a participar.
+        'historial_outcomes': {
+            'empleados':        {'ventana': 3, 'coeficiente': 0.10},
+            'salario_promedio': {'ventana': 3, 'coeficiente': 0.05},
+        },
     },
 
     # -------------------------------------------------------------------------
