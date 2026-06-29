@@ -22,7 +22,9 @@ class CrossValidator:
         n_epochs: int = 10,
         batch_size: int = 32,
         device: torch.device = None,
-        scale: bool = False
+        scale: bool = False,
+        metric: str = 'accuracy',
+        threshold: float = 0.5,
     ):
         self.connector         = connector
         self.dataset_factory   = dataset_factory
@@ -35,6 +37,8 @@ class CrossValidator:
         self.batch_size        = batch_size
         self.device            = device or torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.scale             = scale
+        self.metric            = metric
+        self.threshold         = threshold
 
     def run(self) -> float:
         train_records = self.connector.build_train_records()
@@ -74,9 +78,10 @@ class CrossValidator:
 
             trainer.fit(train_loader, val_loader, n_epochs=self.n_epochs)
 
-            fold_metrics.append(trainer.accuracy(val_loader))
-            print(f"Fold {fold + 1}/{self.k} — val accuracy: {fold_metrics[-1]:.4f}")
+            score = trainer.compute_metric(self.metric, val_loader, threshold=self.threshold)
+            fold_metrics.append(score)
+            print(f"Fold {fold + 1}/{self.k} — val {self.metric}: {score:.4f}")
 
-        mean_acc = float(np.mean(fold_metrics))
-        print(f"CV mean accuracy: {mean_acc:.4f}")
-        return mean_acc
+        mean_score = float(np.mean(fold_metrics))
+        print(f"CV mean {self.metric}: {mean_score:.4f}")
+        return mean_score
