@@ -18,6 +18,11 @@ class DataSimulator:
     """
     Simulador de panel para programa de crédito empresarial.
     """
+    # Los períodos de burn in solo aplican a aquella variables que siguen un
+    # proceso autorregresivo. En este caso, son las outcomes y los efectos
+    # variables o shocks
+    N_BURN_IN = 100
+
     def __init__(self, config: Dict):
         self.config = config
         # default_rng (random number generator) para reproducibilidad
@@ -27,17 +32,7 @@ class DataSimulator:
         self.cupos = cupos if isinstance(cupos, list) else [cupos] * config['n_cohortes']
 
         self.features = config['variables']
-
-        # Generar shocks agregados a través de un proceso AR(1)
-        rho = config['ciclo_economico']['persistencia']
-        vol = config['ciclo_economico']['volatilidad']
-        # Un proceso AR(1) estacionario tiene varianza σ²/(1-ρ²)
-        var_estacionaria = (vol**2) / (1 - rho**2)
-        shocks = np.zeros(config['n_periodos'])
-        shocks[0] = self.rng.normal(0, np.sqrt(var_estacionaria))
-        for t in range(1, config['n_periodos']):
-            shocks[t] = rho * shocks[t-1] + self.rng.normal(0, vol)
-        self.aggregate_shocks = shocks
+        self.aggregate_shocks = self._generate_shocks()
 
         self.treatment_history = {}
 
@@ -50,6 +45,23 @@ class DataSimulator:
             var for var in config['variables'].keys()
             if var not in self.outcomes
         ]
+
+    def _generate_shocks(self) -> np.ndarray:
+        # Generar shocks agregados a través de un proceso AR(1).
+        rho = self.config['ciclo_economico']['persistencia']
+        vol = self.config['ciclo_economico']['volatilidad']
+
+        # Un proceso AR(1) estacionario tiene varianza σ²/(1-ρ²)
+        var_estacionaria = (vol**2) / (1 - rho**2)
+
+        # Se generan N_BURN_IN + n_periodos shocks y se descartan los primeros
+        # N_BURN_IN para que el proceso llegue a su distribución estacionaria.
+        total = self.N_BURN_IN + self.config['n_periodos']
+        shocks = np.zeros(total)
+        shocks[0] = self.rng.normal(0, np.sqrt(var_estacionaria))
+        for t in range(1, total):
+            shocks[t] = rho * shocks[t-1] + self.rng.normal(0, vol)
+        return shocks[self.N_BURN_IN:]
 
     def export_panel_and_config(self, exclude_unobs: bool = True):
         if not hasattr(self, 'panel'):
