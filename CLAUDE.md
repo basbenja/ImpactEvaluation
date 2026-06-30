@@ -14,9 +14,23 @@ Environment variable `DATA_DIR` controls where panel CSVs land (defaults to `./d
 
 ## Running
 
-Main workflow lives in `main.ipynb`. Data generation is in `data_generation/main.py` (or its notebook counterpart). Run notebooks with the `ipykernel` dev dependency already installed.
+**Preferred entrypoint** is `run_pipeline.py`:
 
-To generate synthetic panel data:
+```bash
+uv run python run_pipeline.py --config experiments/exp_000.yaml          # train
+uv run python run_pipeline.py --config experiments/exp_000.yaml --tune   # Optuna search
+uv run python run_pipeline.py --config experiments/exp_000.yaml --panel data/simulacion_xyz/panel.csv  # skip data gen
+```
+
+Each run creates `runs/<name>_<timestamp>/` containing `config.yaml`, `panel.csv`, `model.pt`, `metrics.json`, and `run.log`. Optuna runs also write `optuna.db`.
+
+```bash
+optuna-dashboard sqlite:///runs/<run_dir>/optuna.db   # view Optuna results
+```
+
+Experiment configs live in `experiments/`. Named after Greek letters or `exp_NNN`.
+
+To generate data standalone:
 
 ```bash
 uv run python data_generation/main.py
@@ -24,11 +38,9 @@ uv run python data_generation/main.py
 
 Outputs land in `data/simulacion_<timestamp>/panel.csv` + `config.json`.
 
-For hyperparameter optimization (Optuna), the dashboard is available via `optuna-dashboard`.
-
 ## Architecture
 
-This project uses an LSTM-based classifier to identify counterfactual control firms for **staggered treatment impact evaluation**. Three firm types: **Tratados (T)**, **Controles (C)**, **NiNis** (neither treated nor control).
+LSTM-based classifier to identify counterfactual control firms for **staggered treatment impact evaluation**. Three firm types: **Tratados (T)**, **Controles (C)**, **NiNis** (neither treated nor control).
 
 ### Data flow
 
@@ -36,6 +48,7 @@ This project uses an LSTM-based classifier to identify counterfactual control fi
 data_generation/
   data_config.py     ← single DATA_CONFIG dict with all DGP parameters
   simulator.py       ← DataSimulator: generates long-format panel DataFrame
+  panel_schema.py    ← Col (column name constants) + PanelSchema (pandera validation)
 
 splits/
   split_generator.py ← SplitGenerator: partitions firms into train/test
@@ -43,8 +56,13 @@ splits/
                         test  = all C + remaining NiNi
 
 connectors/
+  base.py            ← BaseConnector (ABC) + Record type alias + preprocess_panel()
   lstm.py            ← LSTMConnector: panel + split → PanelSequenceDataset
                         builds variable-length pre-treatment sequences per firm
+
+datasets/
+  panel_sequence.py  ← PanelSequenceDataset: wraps list[Record]; collate_fn pads
+                        sequences and returns (firm_ids, seqs_padded, lengths, cohorts, labels)
 
 models/
   blocks/lstm.py     ← LSTMBlock: pack_padded_sequence to handle variable lengths
@@ -52,7 +70,12 @@ models/
   lstm_classifier.py ← LSTMClassifier: LSTM hidden state + one-hot cohort → binary label
 
 training/
-  trainer.py         ← Trainer: fit/validation loop + accuracy
+  trainer.py         ← Trainer: fit/eval loop; metrics: accuracy, f1, precision, recall, roc_auc
+  cross_validator.py ← CrossValidator: GroupKFold on train records (groups by firm_id)
+  tuner.py           ← Tuner: Optuna study wrapping CrossValidator; categorical search space
+
+experiments/         ← YAML configs; one file per experiment run
+run_pipeline.py      ← CLI entrypoint: data gen → split → connector → train/tune → save
 ```
 
 ### Key design decisions
@@ -65,23 +88,31 @@ training/
 
 **Cohort as feature**: cohort id is one-hot encoded and concatenated with the LSTM's final hidden state before the dense head. This lets the model condition its prediction on which cohort window is being evaluated.
 
-**Scaler**: `LSTMConnector.convert()` fits a `StandardScaler` on flattened train sequences and applies it to both splits. Scaler is stored in `self.scaler` for reuse.
+**Feature encoding**: `BaseConnector.preprocess_panel()` splits features by dtype — numeric columns are left for `StandardScaler`; bool/binary-int columns cast to float32 and passed through unscaled; object/categorical columns become one-hot dummies (unscaled). Column order after expansion: `[numeric | indicators | dummies]`. `n_numeric` tracks the boundary for partial scaling.
+
+**Scaler**: `LSTMConnector.convert()` fits a `StandardScaler` on flattened train sequences (numeric cols only) and applies it to both splits. Scaler stored in `self.scaler` for reuse. `CrossValidator` re-fits a fresh scaler per fold when `scale=True`.
+
+**Cross-validation**: `CrossValidator` uses `GroupKFold` grouped by `firm_id` so the same firm never appears in both train and val folds.
+
+**Tuner**: `Tuner.run()` creates (or resumes) an Optuna study backed by SQLite. Each trial builds a `CrossValidator` with the sampled hyperparams and returns the mean CV metric. Search space is categorical (defined in `optuna.search_space` in the YAML). Available metrics for `optuna.metric`: `accuracy`, `f1`, `precision`, `recall`, `roc_auc`.
+
+**Logging**: `run_pipeline.py` uses `logging` + `RichHandler` (colored console) + `FileHandler` (`run.log`). Use `log = logging.getLogger(__name__)` in any new module; the root logger is configured in `setup_logging()` at run start.
 
 ### Panel format
 
-Long format: one row per `(id_firma, t)`. Key columns:
+Long format: one row per `(id_firma, t)`. Use `Col` constants from `data_generation/panel_schema.py` for column names. Key columns:
 
 | Column | Meaning |
 |---|---|
 | `id_firma` | firm ID |
 | `t` | period index |
-| `tratado` | True if firm received treatment (ever) and `t >= periodo_tratamiento` |
-| `control` | True if firm is a counterfactual control |
+| `tratado_en_t` | True if firm is treated **at this period** (`t >= periodo_tratamiento`) |
+| `control_en_t` | True if firm is a counterfactual control **at this period** |
 | `cohorte` | cohort index (0-based); -1 if not treated |
 | `periodo_tratamiento` | period when treatment started; -1 if never |
 | `inicio_firma` | first period the firm exists |
 
-Firms with `tratado=False, control=False` are NiNis.
+Firms with `tratado_en_t=False` in all periods and `control_en_t=False` in all periods are NiNis.
 
 ### Data generation parameters
 

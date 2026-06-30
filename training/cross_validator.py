@@ -26,6 +26,28 @@ class CrossValidator:
         metric: str = 'accuracy',
         threshold: float = 0.5,
     ):
+        """
+        connector: needed for building train records and scaling on each fold
+
+        dataset_factory: a callable that takes a list of records and returns a
+            Dataset. Needed to create the loaders for each fold.
+
+        model_factory: a callable that returns a new instance of the model.
+            Needed to create a new fresh model for each fold.
+
+        optimizer_factory: a callable that takes a model and returns a new
+            optimizer. Needed to create a new fresh optimizer for each fold.
+            Remember the optimizer takes the model parameters as input, so it
+            needs to be created after the model.
+
+        criterion: the loss function to use for training. Can be shared across
+            folds.
+
+        collate_fn: the collate function to use for the DataLoader. Can be
+            shared across folds. Needed because LSTM input sequences have
+            different lengths (different firms have different pre-treatment
+            windows).
+        """
         self.connector         = connector
         self.dataset_factory   = dataset_factory
         self.model_factory     = model_factory
