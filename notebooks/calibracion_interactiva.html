@@ -1,0 +1,929 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Calibración Interactiva — Simulación de Crédito</title>
+<style>
+:root {
+  --blue: #3b82f6; --purple: #8b5cf6; --green: #10b981;
+  --red: #ef4444;  --orange: #f59e0b; --gray: #6b7280;
+  --border: #e5e7eb; --light: #f9fafb;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: system-ui, -apple-system, sans-serif; background: #f3f4f6; color: #111; font-size: 14px; }
+.page { max-width: 1400px; margin: 0 auto; padding: 16px; }
+
+header { background: #1e1b4b; color: white; padding: 16px 20px; border-radius: 10px; margin-bottom: 14px; }
+header h1 { font-size: 1.15rem; font-weight: 700; }
+header p  { font-size: 0.78rem; color: #a5b4fc; margin-top: 4px; line-height: 1.5; }
+
+.card { background: white; border-radius: 10px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+.card-title { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: #9ca3af; margin-bottom: 12px; }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+
+.global-row { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; }
+.global-stat .val { font-size: 1.5rem; font-weight: 800; color: #1e1b4b; font-variant-numeric: tabular-nums; }
+.global-stat .lbl { font-size: 0.68rem; color: #9ca3af; }
+.preset-btn { font-size: .72rem; padding: 5px 12px; border-radius: 6px; cursor: pointer; border: 1px solid; }
+.preset-btn.blue { border-color: #6c63ff; background: #ede9fe; color: #4c1d95; }
+.preset-btn.gray { border-color: #d1d5db; background: #f9fafb; color: #374151; }
+
+.sl-group { margin-bottom: 9px; }
+.sl-row { display: flex; align-items: center; gap: 8px; }
+.sl-label { font-size: .77rem; color: #374151; width: 148px; flex-shrink: 0; line-height: 1.3; }
+.sl-label small { display: block; font-size: .65rem; color: #9ca3af; }
+input[type=range] { flex: 1; accent-color: var(--blue); cursor: pointer; }
+.sl-val { font-size: .8rem; font-weight: 700; width: 58px; text-align: right; font-family: monospace; color: #1e1b4b; }
+.sl-hint { font-size: .68rem; color: #9ca3af; margin-top: 2px; padding-left: 156px; }
+
+.inp-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.inp-row label { font-size: .77rem; color: #374151; width: 148px; flex-shrink: 0; }
+.inp-row input[type=number] { width: 88px; padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 5px; font-size: .8rem; font-family: monospace; }
+.inp-row .hint { font-size: .68rem; color: #9ca3af; }
+
+.divider { font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em;
+           color: #d1d5db; border-top: 1px solid #f3f4f6; padding-top: 10px; margin: 12px 0 8px; }
+
+.mini-bar { height: 10px; display: flex; border-radius: 4px; overflow: hidden; margin: 4px 0 2px; }
+.mini-bar .seg { transition: width .15s; }
+
+.res-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 7px; margin-bottom: 10px; }
+.res-item { background: #f9fafb; border-radius: 6px; padding: 7px 9px; }
+.res-item .r-lbl  { font-size: .65rem; color: #9ca3af; margin-bottom: 2px; }
+.res-item .r-val  { font-size: .95rem; font-weight: 800; font-family: monospace; }
+.res-item .r-note { font-size: .63rem; color: #9ca3af; margin-top: 1px; }
+
+.beta-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.beta-chip { border-radius: 6px; padding: 5px 9px; border: 1px solid; }
+.beta-chip .b-lbl { font-size: .62rem; color: #6b7280; }
+.beta-chip .b-val { font-size: .88rem; font-weight: 700; font-family: monospace; }
+.beta-chip.obs    { background: #eff6ff; border-color: #bfdbfe; }
+.beta-chip.unobs  { background: #f5f3ff; border-color: #ddd6fe; }
+.beta-chip.noise  { background: #fff7ed; border-color: #fed7aa; }
+.beta-chip.alpha  { background: #f0fdf4; border-color: #86efac; }
+
+.var-bar { height: 22px; display: flex; border-radius: 5px; overflow: hidden; margin: 6px 0 4px; }
+.var-bar .seg { transition: width .2s; display: flex; align-items: center; justify-content: center;
+                font-size: .62rem; font-weight: 700; color: white; min-width: 0; overflow: hidden; }
+.var-legend { display: flex; gap: 10px; flex-wrap: wrap; }
+.vleg { display: flex; align-items: center; gap: 4px; font-size: .67rem; color: #6b7280; }
+.vleg-dot { width: 8px; height: 8px; border-radius: 2px; }
+
+.chk-row { display: flex; align-items: flex-start; gap: 6px; font-size: .76rem; padding: 5px 0; border-bottom: 1px solid #f3f4f6; }
+.chk-row:last-child { border-bottom: none; }
+.chk-icon { font-size: .85rem; width: 18px; text-align: center; flex-shrink: 0; margin-top: 1px; }
+.chk-text { flex: 1; color: #374151; }
+.chk-detail { font-family: monospace; font-size: .68rem; color: #6b7280; flex-shrink: 0; }
+
+.ok   { color: #059669 !important; }
+.warn { color: #d97706 !important; }
+.bad  { color: #dc2626 !important; }
+
+.overflow-box { background: #fef2f2; border: 1px solid #fca5a5; border-radius: 6px;
+                padding: 7px 10px; font-size: .73rem; color: #991b1b; margin-bottom: 8px; display: none; }
+.overflow-box.show { display: block; }
+.info-box { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px;
+            padding: 7px 10px; font-size: .73rem; color: #1e40af; margin-bottom: 8px; }
+
+.outcome-hdr { display: flex; align-items: center; gap: 7px; margin-bottom: 12px; }
+.outcome-dot { width: 10px; height: 10px; border-radius: 50%; }
+
+/* Eligibility box */
+.elig-box { border-radius: 8px; padding: 10px 14px; margin-bottom: 10px; border: 2px solid;
+            display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.elig-box.ok   { background: #f0fdf4; border-color: #86efac; }
+.elig-box.warn { background: #fffbeb; border-color: #fcd34d; }
+.elig-box.bad  { background: #fef2f2; border-color: #fca5a5; }
+.elig-pct  { font-size: 1.8rem; font-weight: 900; font-family: monospace; line-height: 1; }
+.elig-box.ok   .elig-pct { color: #15803d; }
+.elig-box.warn .elig-pct { color: #b45309; }
+.elig-box.bad  .elig-pct { color: #dc2626; }
+.elig-meta { flex: 1; }
+.elig-label   { font-size: .8rem; font-weight: 600; color: #374151; display: block; }
+.elig-formula { font-size: .68rem; color: #9ca3af; font-family: monospace; margin-top: 2px; }
+.elig-target  { font-size: .68rem; font-weight: 600; }
+.elig-box.ok   .elig-target { color: #15803d; }
+.elig-box.warn .elig-target { color: #b45309; }
+.elig-box.bad  .elig-target { color: #dc2626; }
+
+/* Explanation section */
+.exp-section { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+@media (max-width: 800px) { .exp-section { grid-template-columns: 1fr; } }
+.flow-chain { display: flex; flex-direction: column; gap: 0; }
+.flow-node { border-radius: 7px; padding: 8px 12px; font-size: .78rem; border: 1.5px solid; }
+.flow-node.obs    { background: #eff6ff; border-color: #93c5fd; }
+.flow-node.unobs  { background: #f5f3ff; border-color: #c4b5fd; }
+.flow-node.ci     { background: #fff7ed; border-color: #fed7aa; font-weight: 600; }
+.flow-node.yst    { background: #fefce8; border-color: #fde047; font-weight: 600; }
+.flow-node.elig   { background: #fef2f2; border-color: #fca5a5; }
+.flow-node.pscr   { background: #f0fdf4; border-color: #86efac; }
+.flow-node.treat  { background: #ecfeff; border-color: #67e8f9; }
+.flow-arrow { text-align: center; font-size: .9rem; color: #9ca3af; line-height: 1.4; margin: 1px 0; }
+.flow-arrow small { display: block; font-size: .63rem; color: #d1d5db; }
+.flow-split { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 1px 0; }
+.flow-split .flow-arrow { font-size: .75rem; }
+.exp-cards { display: flex; flex-direction: column; gap: 10px; }
+.exp-card { border-radius: 8px; padding: 12px 14px; border-left: 4px solid; }
+.exp-card.obs   { background: #eff6ff; border-color: #3b82f6; }
+.exp-card.unobs { background: #f5f3ff; border-color: #8b5cf6; }
+.exp-card.dyn   { background: #fef2f2; border-color: #ef4444; }
+.exp-card-title { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 5px; }
+.exp-card.obs   .exp-card-title { color: #1d4ed8; }
+.exp-card.unobs .exp-card-title { color: #6d28d9; }
+.exp-card.dyn   .exp-card-title { color: #dc2626; }
+.exp-card p { font-size: .77rem; color: #374151; line-height: 1.55; margin: 0; }
+.exp-card code { background: rgba(0,0,0,.06); padding: 1px 4px; border-radius: 3px; font-size: .72rem; }
+
+#config-out { font-size: .72rem; background: #0f172a; color: #94a3b8;
+              padding: 14px; border-radius: 8px; overflow-x: auto; line-height: 1.65;
+              white-space: pre; font-family: 'Menlo','Consolas',monospace; }
+
+.fmt-btn { font-size: .72rem; padding: 5px 12px; border-radius: 6px; cursor: pointer;
+           border: 1px solid #d1d5db; background: #f9fafb; color: #374151; transition: all .15s; }
+.fmt-btn.active { background: #1e1b4b; color: white; border-color: #1e1b4b; }
+.fmt-btn.copy   { background: #eff6ff; border-color: #93c5fd; color: #1d4ed8; }
+.fmt-btn.copy.done { background: #f0fdf4; border-color: #86efac; color: #15803d; }
+.fmt-btn.dl     { background: #f5f3ff; border-color: #c4b5fd; color: #6d28d9; }
+</style>
+</head>
+<body>
+<div class="page">
+
+<header>
+  <h1>Calibración Interactiva — Modelo de Simulación de Crédito</h1>
+  <p>
+    Burn-in: Y<sub>i,0</sub> = Y*<sub>i</sub> = c<sub>i</sub>/(1−ρ) + ξ<sub>i</sub>, ξ<sub>i</sub>~N(0, σ²_ε/(1−ρ²))  ·
+    <b>Empleados:</b> β's fijan media y varianza de observables  ·
+    <b>Salario:</b> intercepto α₀ fija media; β's y σ_ε solo controlan varianza
+  </p>
+</header>
+
+<!-- ══════════ GLOBAL ══════════ -->
+<div class="card" style="margin-bottom:14px">
+  <div class="card-title">Parámetros globales del AR(1)</div>
+  <div class="global-row">
+    <div style="flex:1;min-width:260px">
+      <div class="sl-row">
+        <span class="sl-label">ρ — persistencia</span>
+        <input type="range" id="rho" min="0.80" max="0.995" step="0.005" value="0.95" oninput="update()">
+        <span class="sl-val" id="g-rho">0.950</span>
+      </div>
+    </div>
+    <div class="global-stat"><div class="val" id="g-mult">×20</div><div class="lbl">Multiplicador 1/(1−ρ)</div></div>
+    <div class="global-stat"><div class="val" id="g-hl">14.2</div><div class="lbl">Vida media (períodos)</div></div>
+    <div class="global-stat"><div class="val" id="g-conv">87%</div><div class="lbl">% convergido en t=40</div></div>
+    <div style="display:flex;gap:8px">
+      <button class="preset-btn blue" onclick="preset('calibrado')">Preset calibrado</button>
+      <button class="preset-btn gray"  onclick="preset('conservador')">Conservador</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ PARAMS ══════════ -->
+<div class="grid-2" style="margin-bottom:14px">
+
+  <!-- ── Empleados params ── -->
+  <div class="card">
+    <div class="outcome-hdr">
+      <div class="outcome-dot" style="background:#10b981"></div>
+      <span style="font-weight:700;font-size:.95rem">Empleados</span>
+      <span style="font-size:.7rem;color:#9ca3af">(AR(1) en niveles · presupuesto de media)</span>
+    </div>
+
+    <div class="divider">Targets — estado estacionario</div>
+    <div class="inp-row">
+      <label>μ_target  E[Y*]</label>
+      <input type="number" id="e-mu" value="40" min="1" max="500" step="1" oninput="update()">
+      <span class="hint">rango elegible: 3–100</span>
+    </div>
+    <div class="inp-row">
+      <label>σ_target  sd(Y*)</label>
+      <input type="number" id="e-sig" value="25" min="1" max="200" step="1" oninput="update()">
+      <span class="hint">dispersión cross-seccional</span>
+    </div>
+
+    <div class="divider">Presupuesto de media — distribución entre observables</div>
+    <div class="sl-group">
+      <div class="sl-row"><span class="sl-label">Antigüedad<small>Exp(8) · E[X]=8</small></span>
+        <input type="range" id="e-sa" min="0" max="100" step="1" value="40" oninput="update()">
+        <span class="sl-val" id="e-sa-v">40%</span></div>
+      <div class="sl-row"><span class="sl-label">Exportadora<small>Bern(0.12) · E[X]=0.12</small></span>
+        <input type="range" id="e-se" min="0" max="100" step="1" value="20" oninput="update()">
+        <span class="sl-val" id="e-se-v">20%</span></div>
+      <div class="sl-row"><span class="sl-label">Ratio formalidad<small>Beta(4,2) · E[X]≈0.67</small></span>
+        <input type="range" id="e-sf" min="0" max="100" step="1" value="40" oninput="update()">
+        <span class="sl-val" id="e-sf-v">40%</span></div>
+    </div>
+    <div class="mini-bar" id="e-bbar">
+      <div class="seg" id="e-bb-a" style="background:#3b82f6"></div>
+      <div class="seg" id="e-bb-e" style="background:#60a5fa"></div>
+      <div class="seg" id="e-bb-f" style="background:#93c5fd"></div>
+    </div>
+    <div style="font-size:.65rem;color:#9ca3af;margin-bottom:4px">Distribución normalizada del presupuesto de media (Σ = 100%)</div>
+
+    <div class="divider">Varianza — asignación del std restante tras observables</div>
+    <div class="sl-group">
+      <div class="sl-row"><span class="sl-label">Ruido ε<small>% del std restante</small></span>
+        <input type="range" id="e-fn" min="0" max="100" step="1" value="30" oninput="update()">
+        <span class="sl-val" id="e-fn-v">30%</span></div>
+      <div class="sl-row"><span class="sl-label">Calidad vs Prod.<small>dentro de no-obs.</small></span>
+        <input type="range" id="e-sc" min="0" max="100" step="1" value="60" oninput="update()">
+        <span class="sl-val" id="e-sc-v">60/40</span></div>
+      <div class="sl-hint" id="e-vhint"></div>
+    </div>
+
+    <div class="divider">Efecto del tratamiento (aditivo)</div>
+    <div class="inp-row"><label>τ_imm</label>
+      <input type="number" id="e-ti" value="2" min="0" max="100" step="0.5" oninput="update()">
+      <span class="hint">empleados inmediatos</span></div>
+    <div class="inp-row"><label>τ_grad (por período)</label>
+      <input type="number" id="e-tg" value="0.5" min="0" max="20" step="0.1" oninput="update()"></div>
+    <div class="inp-row"><label>k_max</label>
+      <input type="number" id="e-km" value="6" min="1" max="24" step="1" oninput="update()"></div>
+  </div>
+
+  <!-- ── Salario params ── -->
+  <div class="card">
+    <div class="outcome-hdr">
+      <div class="outcome-dot" style="background:#8b5cf6"></div>
+      <span style="font-weight:700;font-size:.95rem">Salario promedio</span>
+      <span style="font-size:.7rem;color:#9ca3af">(AR(1) en log · media por intercepto)</span>
+    </div>
+
+    <div class="info-box">
+      La media se fija con intercepto α₀ = μ·(1−ρ) − Σβₖ·E[Xₖ]. Los β's de las observables
+      se calibran <b>solo para varianza</b>, sin restricción de media. Así no hay overflow.
+    </div>
+
+    <div class="divider">Targets — estado estacionario</div>
+    <div class="inp-row">
+      <label>μ_target  (ln salario)</label>
+      <input type="number" id="s-mu" value="12.0" min="8" max="16" step="0.05" oninput="update()">
+      <span class="hint" id="s-mu-lv">≈ 162k pesos</span>
+    </div>
+    <div class="inp-row">
+      <label>σ_target  (sd en log)</label>
+      <input type="number" id="s-sig" value="0.30" min="0.02" max="1.5" step="0.01" oninput="update()">
+      <span class="hint" id="s-sig-cv">CV ≈ 30%</span>
+    </div>
+
+    <div class="divider">Varianza total — distribución entre fuentes</div>
+    <div class="sl-group">
+      <div class="sl-row"><span class="sl-label">% obs. (ant+exp+form)<small>fracción de σ²_target</small></span>
+        <input type="range" id="s-fo" min="0" max="80" step="1" value="20" oninput="update()">
+        <span class="sl-val" id="s-fo-v">20%</span></div>
+    </div>
+
+    <div class="divider">Distribución dentro de observables</div>
+    <div class="sl-group">
+      <div class="sl-row"><span class="sl-label">Antigüedad<small>Exp(8) · Var=64</small></span>
+        <input type="range" id="s-sa" min="0" max="100" step="1" value="50" oninput="update()">
+        <span class="sl-val" id="s-sa-v">50%</span></div>
+      <div class="sl-row"><span class="sl-label">Exportadora<small>Bern(0.12) · Var≈0.106</small></span>
+        <input type="range" id="s-se" min="0" max="100" step="1" value="20" oninput="update()">
+        <span class="sl-val" id="s-se-v">20%</span></div>
+      <div class="sl-row"><span class="sl-label">Ratio formalidad<small>Beta(4,2) · Var≈0.032</small></span>
+        <input type="range" id="s-sf" min="0" max="100" step="1" value="30" oninput="update()">
+        <span class="sl-val" id="s-sf-v">30%</span></div>
+    </div>
+    <div class="mini-bar" id="s-bbar">
+      <div class="seg" id="s-bb-a" style="background:#8b5cf6"></div>
+      <div class="seg" id="s-bb-e" style="background:#a78bfa"></div>
+      <div class="seg" id="s-bb-f" style="background:#c4b5fd"></div>
+    </div>
+    <div style="font-size:.65rem;color:#9ca3af;margin-bottom:4px">Distribución normalizada dentro de observables</div>
+
+    <div class="divider">Varianza restante — no-observables y ruido</div>
+    <div class="sl-group">
+      <div class="sl-row"><span class="sl-label">Ruido ε<small>% del std no-obs. restante</small></span>
+        <input type="range" id="s-fn" min="0" max="100" step="1" value="40" oninput="update()">
+        <span class="sl-val" id="s-fn-v">40%</span></div>
+      <div class="sl-row"><span class="sl-label">Calidad vs Prod.<small>dentro de no-obs.</small></span>
+        <input type="range" id="s-sc" min="0" max="100" step="1" value="60" oninput="update()">
+        <span class="sl-val" id="s-sc-v">60/40</span></div>
+      <div class="sl-hint" id="s-vhint"></div>
+    </div>
+
+    <div class="divider">Efecto del tratamiento (porcentual)</div>
+    <div class="inp-row"><label>τ_imm</label>
+      <input type="number" id="s-ti" value="0.05" min="0" max="1" step="0.01" oninput="update()">
+      <span class="hint">+5% salario inmediato</span></div>
+    <div class="inp-row"><label>τ_grad</label>
+      <input type="number" id="s-tg" value="0.01" min="0" max="0.2" step="0.005" oninput="update()"></div>
+    <div class="inp-row"><label>k_max</label>
+      <input type="number" id="s-km" value="6" min="1" max="24" step="1" oninput="update()"></div>
+  </div>
+</div>
+
+<!-- ══════════ RESULTS ══════════ -->
+<div class="grid-2" style="margin-bottom:14px">
+
+  <!-- ── Empleados results ── -->
+  <div class="card">
+    <div class="card-title">Resultados — Empleados</div>
+    <div class="overflow-box" id="e-ov">⚠ Los β de observables generan más varianza de la deseada. Aumentar σ_target o reducir shares.</div>
+    <div class="beta-row" id="e-betas"></div>
+    <!-- Eligibility box -->
+    <div class="elig-box ok" id="e-elig-box">
+      <span class="elig-pct" id="e-elig-pct">—</span>
+      <div class="elig-meta">
+        <span class="elig-label">de firmas elegibles en estado estacionario</span>
+        <span class="elig-formula" id="e-elig-formula">P(3 ≤ Y* ≤ 100)</span>
+        <span class="elig-target" id="e-elig-target">target: 30–60%</span>
+      </div>
+    </div>
+    <div class="divider">Métricas clave</div>
+    <div class="res-grid" id="e-metrics"></div>
+    <div class="divider">Descomposición de Var(Y*)</div>
+    <div class="var-bar" id="e-vbar">
+      <div class="seg" id="e-vb-o" style="background:#3b82f6"></div>
+      <div class="seg" id="e-vb-u" style="background:#8b5cf6"></div>
+      <div class="seg" id="e-vb-n" style="background:#ef4444"></div>
+    </div>
+    <div class="var-legend">
+      <div class="vleg"><div class="vleg-dot" style="background:#3b82f6"></div><span id="e-vl-o">Obs: 0%</span></div>
+      <div class="vleg"><div class="vleg-dot" style="background:#8b5cf6"></div><span id="e-vl-u">No-obs: 0%</span></div>
+      <div class="vleg"><div class="vleg-dot" style="background:#ef4444"></div><span id="e-vl-n">Ruido: 0%</span></div>
+    </div>
+    <div class="divider">Checks</div>
+    <div id="e-checks"></div>
+  </div>
+
+  <!-- ── Salario results ── -->
+  <div class="card">
+    <div class="card-title">Resultados — Salario (log)</div>
+    <div class="overflow-box" id="s-ov-neg">⚠ El intercepto α₀ es negativo — las observables empujan demasiado la media. Reducir % obs. o reducir su share.</div>
+    <div class="beta-row" id="s-betas"></div>
+    <div class="divider">Métricas clave</div>
+    <div class="res-grid" id="s-metrics"></div>
+    <div class="divider">Descomposición de Var(Y*)</div>
+    <div class="var-bar" id="s-vbar">
+      <div class="seg" id="s-vb-o" style="background:#6d28d9"></div>
+      <div class="seg" id="s-vb-u" style="background:#a78bfa"></div>
+      <div class="seg" id="s-vb-n" style="background:#f87171"></div>
+    </div>
+    <div class="var-legend">
+      <div class="vleg"><div class="vleg-dot" style="background:#6d28d9"></div><span id="s-vl-o">Obs: 0%</span></div>
+      <div class="vleg"><div class="vleg-dot" style="background:#a78bfa"></div><span id="s-vl-u">No-obs: 0%</span></div>
+      <div class="vleg"><div class="vleg-dot" style="background:#f87171"></div><span id="s-vl-n">Ruido: 0%</span></div>
+    </div>
+    <div class="divider">Checks</div>
+    <div id="s-checks"></div>
+  </div>
+</div>
+
+<!-- ══════════ EXPLICACIÓN DE RELACIONES ══════════ -->
+<div class="card" style="margin-bottom:14px">
+  <div class="card-title">Cómo se relacionan las variables — ciclo causal completo</div>
+  <div class="exp-section">
+
+    <!-- Columna izquierda: flujo causal -->
+    <div>
+      <div style="font-size:.72rem;font-weight:700;color:#6b7280;margin-bottom:10px;text-transform:uppercase;letter-spacing:.06em">Cadena causal</div>
+      <div class="flow-chain">
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+          <div class="flow-node obs">
+            <b>Observables</b> X<sub>i</sub><br>
+            <span style="font-size:.68rem;color:#6b7280">antigüedad, exportadora,<br>ratio_formalidad</span>
+          </div>
+          <div class="flow-node unobs">
+            <b>No observables</b> X<sub>i</sub><br>
+            <span style="font-size:.68rem;color:#6b7280">calidad_gerencial,<br>productividad, propensión</span>
+          </div>
+        </div>
+
+        <div class="flow-arrow">↓ &nbsp; β<sub>k</sub> · X<sub>ik</sub>
+          <small>coeficientes calibrados · observables fijan media · no-obs solo varianza</small>
+        </div>
+
+        <div class="flow-node ci">
+          c<sub>i</sub> = α₀ + Σ β<sub>k</sub> · X<sub>ik</sub>
+          <span style="font-size:.68rem;font-weight:400;color:#92400e;margin-left:6px">efecto fijo de firma</span>
+        </div>
+
+        <div class="flow-arrow">↓ &nbsp; ÷ (1 − ρ) &nbsp;—&nbsp; amplificación ×<span id="exp-mult">20</span>
+          <small>a mayor ρ, mayor amplificación de diferencias entre firmas</small>
+        </div>
+
+        <div class="flow-node yst">
+          Y*<sub>i</sub> = c<sub>i</sub> / (1 − ρ) &nbsp; <span style="font-size:.68rem;font-weight:400;color:#854d0e">estado estacionario</span>
+        </div>
+
+        <div class="flow-split">
+          <div class="flow-arrow">↓ elegibilidad dinámica
+            <small style="color:#fca5a5;font-weight:600">empleados ∈ [3, 100]<br>depende del outcome</small>
+          </div>
+          <div class="flow-arrow">↙ también entra en
+            <small>propensity score<br>junto con X<sub>i</sub></small>
+          </div>
+        </div>
+
+        <div class="flow-node pscr">
+          Propensity score &nbsp; p<sub>i</sub> = σ(α₀ + Σγ<sub>k</sub>·X<sub>ik</sub> + δ<sub>t</sub>)
+          <span style="font-size:.68rem;color:#166534;display:block;margin-top:2px">incluye no-observables → endogeneidad</span>
+        </div>
+
+        <div class="flow-arrow">↓ &nbsp; Bernoulli(p<sub>i</sub>) → asignación con cupo</div>
+
+        <div class="flow-node treat">
+          τ<sub>i</sub>(k) = [τ<sub>imm</sub> + τ<sub>grad</sub>·k] · (1 + h<sub>i</sub>)
+          <span style="font-size:.68rem;color:#0e7490;display:block;margin-top:2px">h<sub>i</sub> ~ calidad_gerencial → heterogeneidad del efecto</span>
+        </div>
+
+        <div class="flow-arrow">↓ &nbsp; Y<sub>i,t</sub> = ρ·Y<sub>i,t−1</sub> + c<sub>i</sub> + ε<sub>i,t</sub> + τ<sub>i,t</sub></div>
+
+        <div class="flow-node yst" style="text-align:center">
+          Y<sub>i,t</sub> &nbsp;—&nbsp; <b>outcome observado en el panel</b>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Columna derecha: tres efectos clave -->
+    <div class="exp-cards">
+
+      <div class="exp-card obs">
+        <div class="exp-card-title">Observables → media Y varianza</div>
+        <p>
+          Las variables con <code>E[X] ≠ 0</code> (antigüedad, exportadora, formalidad)
+          desplazan la media del outcome via <code>β·E[X]/(1−ρ)</code>.
+          Ese mismo β también genera varianza: <code>β²·Var[X]/(1−ρ)²</code>.
+          Con ρ alto el multiplicador amplifica ambos efectos simultáneamente,
+          por eso el presupuesto de media y el presupuesto de varianza están acoplados.
+          <br><br>
+          El evaluador <b>puede controlar</b> por estas variables → no generan sesgo de selección por sí solas.
+        </p>
+      </div>
+
+      <div class="exp-card unobs">
+        <div class="exp-card-title">No observables → solo varianza + confounding</div>
+        <p>
+          Las variables con <code>E[X] = 0</code> (calidad_gerencial, productividad_latente)
+          <b>no afectan la media</b> de Y* pero sí su varianza: <code>β²/(1−ρ)²</code>.
+          Lo crítico: estas mismas variables entran en el <b>propensity score</b>.
+          <br><br>
+          Resultado: las firmas con mayor calidad gerencial tienen mejores outcomes de base
+          <em>y</em> mayor probabilidad de participar. El evaluador no puede controlar por esto
+          → <b>fuente principal de sesgo de selección</b>. El % no-obs en la barra de varianza
+          calibra la dificultad del problema de identificación.
+        </p>
+      </div>
+
+      <div class="exp-card dyn">
+        <div class="exp-card-title">Elegibilidad dinámica → feedback outcome → selección</div>
+        <p>
+          La condición <code>empleados ∈ [3, 100]</code> usa el valor del <b>período actual</b>,
+          no las características fijas. Como empleados evoluciona via AR(1), el historial de
+          shocks determina si la firma está en el pool de candidatas en cada cohorte.
+          <br><br>
+          Esto crea un loop: <code>Y(t−1) → elegibilidad(t) → tratamiento(t) → Y(t)</code>.
+          La fracción elegible (caja verde en resultados) depende de dónde cae la distribución
+          estacionaria respecto al intervalo [3, 100]. Si es &gt;80%, el criterio no selecciona;
+          si es &lt;20%, casi no hay candidatos.
+        </p>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ CONFIG OUTPUT ══════════ -->
+<div class="card">
+  <div class="card-title">Config exportable</div>
+  <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center;flex-wrap:wrap">
+    <button class="fmt-btn active" id="btn-json"   onclick="setFmt('json')">JSON</button>
+    <button class="fmt-btn"        id="btn-pydict" onclick="setFmt('pydict')">Python dict</button>
+    <div style="flex:1"></div>
+    <button class="fmt-btn copy" id="btn-copy" onclick="copyConfig()">Copiar al portapapeles</button>
+    <button class="fmt-btn dl"   onclick="downloadConfig()">Descargar archivo</button>
+  </div>
+  <div style="font-size:.68rem;color:#9ca3af;margin-bottom:8px" id="fmt-hint">
+    JSON: <code style="background:#f3f4f6;padding:1px 5px;border-radius:3px">import json; cfg = json.load(open("calibracion.json"))</code>
+  </div>
+  <pre id="config-out"></pre>
+</div>
+
+</div><!-- /page -->
+
+<script>
+const EX   = { ant: 8.0, exp: 0.12,     form: 4/6 };
+const VarX = { ant: 64,  exp: 0.12*0.88, form: (4*2)/(36*7) };
+
+function Φ(x) {
+  const p=0.3275911, a=[0.254829592,-0.284496736,1.421413741,-1.453152027,1.061405429];
+  const s = x<0 ? -1 : 1; x = Math.abs(x)/Math.SQRT2;
+  const t = 1/(1+p*x);
+  const y = 1 - (((((a[4]*t+a[3])*t+a[2])*t+a[1])*t+a[0])*t)*Math.exp(-x*x);
+  return 0.5*(1+s*y);
+}
+function f2(x,d=4) { return isNaN(x)||!isFinite(x) ? '—' : x.toFixed(d); }
+function fK(x) { return x>=1e6 ? (x/1e6).toFixed(2)+'M' : x>=1e3 ? (x/1e3).toFixed(1)+'k' : x.toFixed(0); }
+
+// ── Empleados: presupuesto de media → β's; varianza restante → noise + unobs ──
+function computeEmp(rho, mu, sigma, sa_r, se_r, sf_r, fn_pct, sc_pct, ti, tg, km) {
+  const ss = sa_r+se_r+sf_r || 1;
+  const sa=sa_r/ss, se=se_r/ss, sf=sf_r/ss;
+  const fn=fn_pct/100, sc=sc_pct/100;
+  const mult=1/(1-rho), budget=mu*(1-rho);
+
+  const ba=sa*budget/EX.ant, be=se*budget/EX.exp, bf=sf*budget/EX.form;
+  const Vc_obs = ba*ba*VarX.ant + be*be*VarX.exp + bf*bf*VarX.form;
+  const Vo_star = Vc_obs*mult*mult;
+
+  const Vt=sigma*sigma, Vr=Math.max(0,Vt-Vo_star), overflow=(Vt-Vo_star)<-1e-9;
+  const se_val=Math.sqrt(fn*Vr*(1-rho*rho));
+  const Vn_star=fn*Vr, Vu_star=(1-fn)*Vr;
+  const Vc_u=Vu_star*(1-rho)*(1-rho);
+  const b_cal=Math.sqrt(sc*Vc_u), b_prod=Math.sqrt((1-sc)*Vc_u);
+
+  const EYstar=budget*mult;
+  const Var_act=Vo_star+Vu_star+Vn_star, tot=Var_act||1;
+  return {
+    mode:'emp', sa,se,sf, mult, budget, alpha0:null,
+    ba,be,bf, b_cal,b_prod, se_val,
+    EYstar, sig_actual:Math.sqrt(Var_act),
+    tau_max:ti+tg*km, SNR:(ti+tg*km)/sigma,
+    Vo_star,Vu_star,Vn_star, Vt,Vr, overflow,
+    fo:Vo_star/tot, fu:Vu_star/tot, fn_:Vn_star/tot
+  };
+}
+
+// ── Salario: intercepto fija media; β's solo controlan varianza ──
+function computeSal(rho, mu, sigma, fobs_pct, sa_r, se_r, sf_r, fn_pct, sc_pct, ti, tg, km) {
+  const ss=sa_r+se_r+sf_r || 1;
+  const sa=sa_r/ss, se=se_r/ss, sf=sf_r/ss;
+  const fobs=fobs_pct/100, fn=fn_pct/100, sc=sc_pct/100;
+  const mult=1/(1-rho);
+
+  const Vt=sigma*sigma;
+  const Vo_star=fobs*Vt;                          // assigning this fraction to observables
+
+  // β_k from variance target: Var(c_i_k) = s_k * fobs * Vt * (1-ρ)²
+  // β_k = sqrt(Var(c_i_k) / VarX_k)
+  const ba=Math.sqrt(sa*Vo_star*(1-rho)*(1-rho)/VarX.ant);
+  const be=Math.sqrt(se*Vo_star*(1-rho)*(1-rho)/VarX.exp);
+  const bf=Math.sqrt(sf*Vo_star*(1-rho)*(1-rho)/VarX.form);
+
+  // intercept absorbs the mean
+  const alpha0 = mu*(1-rho) - (ba*EX.ant + be*EX.exp + bf*EX.form);
+  const negAlpha = alpha0 < 0;
+
+  const Vr=(1-fobs)*Vt;
+  const se_val=Math.sqrt(fn*Vr*(1-rho*rho));
+  const Vn_star=fn*Vr, Vu_star=(1-fn)*Vr;
+  const Vc_u=Vu_star*(1-rho)*(1-rho);
+  const b_cal=Math.sqrt(sc*Vc_u), b_prod=Math.sqrt((1-sc)*Vc_u);
+
+  const EYstar=mu;                                // exact by construction
+  const Var_act=Vo_star+Vu_star+Vn_star;
+  const tot=Var_act||1;
+  return {
+    mode:'sal', sa,se,sf, mult, budget:mu*(1-rho), alpha0,
+    ba,be,bf, b_cal,b_prod, se_val,
+    EYstar, sig_actual:sigma,                     // exact by construction
+    tau_max:ti+tg*km, SNR:(ti+tg*km)/sigma,
+    Vo_star,Vu_star,Vn_star, Vt,Vr, overflow:false, negAlpha,
+    fo:fobs, fu:Vu_star/tot, fn_:Vn_star/tot
+  };
+}
+
+function renderBetas(id, r) {
+  const chips = [
+    { lbl:'β antigüedad',     val:r.ba,     cls:'obs'   },
+    { lbl:'β exportadora',    val:r.be,     cls:'obs'   },
+    { lbl:'β formalidad',     val:r.bf,     cls:'obs'   },
+    { lbl:'β calidad_ger.',   val:r.b_cal,  cls:'unobs' },
+    { lbl:'β productividad',  val:r.b_prod, cls:'unobs' },
+    { lbl:'σ_ε (volatilidad)',val:r.se_val, cls:'noise' },
+  ];
+  if (r.mode==='sal') {
+    chips.push({ lbl:'α₀ (intercepto)', val:r.alpha0, cls:'alpha' });
+  }
+  document.getElementById(id).innerHTML = chips.map(c=>
+    `<div class="beta-chip ${c.cls}"><div class="b-lbl">${c.lbl}</div><div class="b-val">${f2(c.val,5)}</div></div>`
+  ).join('');
+}
+
+function renderMetrics(id, r, mu, sig, isLog) {
+  const lvl = isLog ? `<div class="r-note">nivel: ${fK(Math.exp(r.EYstar + r.sig_actual*r.sig_actual/2))} pesos</div>` : '';
+  const cv  = isLog ? `<div class="r-note">CV: ${f2(Math.sqrt(Math.exp(r.sig_actual*r.sig_actual)-1)*100,1)}%</div>` : '';
+  const Eok = Math.abs(r.EYstar-mu)<0.01 ? 'ok' : 'bad';
+  const Sok = Math.abs(r.sig_actual-sig)<sig*0.05 ? 'ok' : 'warn';
+  const SNRok = r.SNR>=0.1 ? 'ok' : r.SNR>=0.05 ? 'warn' : 'bad';
+  document.getElementById(id).innerHTML = `
+    <div class="res-item"><div class="r-lbl">E[Y*] — target ${mu}</div>
+      <div class="r-val ${Eok}">${f2(r.EYstar,3)}</div>${lvl}</div>
+    <div class="res-item"><div class="r-lbl">σ(Y*) — target ${sig}</div>
+      <div class="r-val ${Sok}">${f2(r.sig_actual,3)}</div>${cv}</div>
+    <div class="res-item"><div class="r-lbl">σ_ε (volatilidad)</div>
+      <div class="r-val">${f2(r.se_val,5)}</div></div>
+    <div class="res-item"><div class="r-lbl">τ_max</div>
+      <div class="r-val">${f2(r.tau_max,2)}</div></div>
+    <div class="res-item"><div class="r-lbl">SNR = τ_max/σ</div>
+      <div class="r-val ${SNRok}">${f2(r.SNR,3)}</div></div>
+    <div class="res-item"><div class="r-lbl">${r.mode==='sal' ? 'α₀ intercepto' : 'Presupuesto c_i'}</div>
+      <div class="r-val ${r.mode==='sal' && r.negAlpha ? 'bad' : ''}">${r.mode==='sal' ? f2(r.alpha0,5) : f2(r.budget,4)}</div>
+      <div class="r-note">${r.mode==='sal' ? 'μ·(1−ρ) − Σβ·E[X]' : '= μ·(1−ρ)'}</div></div>`;
+}
+
+function renderChecks(id, r, mu, sig, isEmp, rho) {
+  const hl=Math.log(0.5)/Math.log(rho);
+  const checks=[];
+
+  if (isEmp) {
+    checks.push(r.overflow
+      ? {ok:false, txt:'Var. observable excede σ²_target', dtl:`Vo=${f2(r.Vo_star,1)} > Vt=${f2(r.Vt,1)}`}
+      : {ok:true,  txt:'Var. observable dentro del target', dtl:`${f2(r.fo*100,1)}% de Var(Y*)`});
+  } else {
+    checks.push(r.negAlpha
+      ? {ok:false, txt:'Intercepto α₀ negativo — reducir % obs.', dtl:`α₀=${f2(r.alpha0,4)}`}
+      : {ok:true,  txt:`Intercepto α₀ positivo ✓`, dtl:`α₀=${f2(r.alpha0,4)}`});
+  }
+
+  checks.push({ok:true, txt:'Consistencia interna: E[Y*] = μ_target', dtl:`${f2(r.EYstar,3)} = ${mu}`});
+
+  if (isEmp) {
+    const p=2*(1-Φ(0.5/Math.max(r.se_val,1e-9)));
+    checks.push(r.se_val>=1
+      ? {ok:true,  txt:'σ_ε mueve valores enteros', dtl:`P(±1) ≈ ${f2(p*100,1)}%`}
+      : {ok:false, txt:'σ_ε demasiado pequeño para enteros', dtl:`σ_ε=${f2(r.se_val,5)}`});
+  } else {
+    checks.push(r.se_val>=0.001
+      ? {ok:true, txt:'σ_ε no negligible', dtl:`σ_ε=${f2(r.se_val,5)}`}
+      : {ok:false,txt:'σ_ε negligible', dtl:`σ_ε=${f2(r.se_val,5)}`});
+  }
+
+  checks.push(r.SNR>=0.1
+    ? {ok:true,  txt:'Efecto detectable (SNR ≥ 0.1)', dtl:`SNR=${f2(r.SNR,3)}`}
+    : r.SNR>=0.05
+    ? {ok:false, warn:true, txt:'Efecto débil (0.05 ≤ SNR < 0.1)', dtl:`SNR=${f2(r.SNR,3)}`}
+    : {ok:false, txt:'Efecto muy débil (SNR < 0.05)', dtl:`SNR=${f2(r.SNR,3)}`});
+
+  checks.push(r.fu>=0.1
+    ? {ok:true, txt:'No-obs. generan sesgo de selección', dtl:`${f2(r.fu*100,1)}% de Var(Y*)`}
+    : {ok:false,warn:true, txt:'No-obs. con poca varianza — sesgo débil', dtl:`${f2(r.fu*100,1)}% de Var(Y*)`});
+
+  checks.push({ok:true, txt:`ρ=${rho.toFixed(3)} → vida media ${hl.toFixed(1)} períodos`, dtl:`${f2((1-Math.pow(rho,40))*100,1)}% conv. en t=40`});
+
+  document.getElementById(id).innerHTML = checks.map(c=>{
+    const icon=c.ok?'✓':(c.warn?'⚠':'✗'), cls=c.ok?'ok':(c.warn?'warn':'bad');
+    return `<div class="chk-row"><span class="chk-icon ${cls}">${icon}</span>
+      <span class="chk-text">${c.txt}</span><span class="chk-detail">${c.dtl||''}</span></div>`;
+  }).join('');
+}
+
+function setVBar(pre, fo, fu, fn_) {
+  ['o','u','n'].forEach((s,i)=>{
+    const v=[fo,fu,fn_][i];
+    document.getElementById(pre+'vb-'+s).style.width=(v*100)+'%';
+  });
+  document.getElementById(pre+'vl-o').textContent=`Obs: ${f2(fo*100,1)}%`;
+  document.getElementById(pre+'vl-u').textContent=`No-obs: ${f2(fu*100,1)}%`;
+  document.getElementById(pre+'vl-n').textContent=`Ruido: ${f2(fn_*100,1)}%`;
+}
+
+function update() {
+  const rho=parseFloat(document.getElementById('rho').value);
+  document.getElementById('g-rho').textContent=rho.toFixed(3);
+  document.getElementById('g-mult').textContent='×'+(1/(1-rho)).toFixed(0);
+  const hl=Math.log(0.5)/Math.log(rho);
+  document.getElementById('g-hl').textContent=hl.toFixed(1);
+  document.getElementById('g-conv').textContent=f2((1-Math.pow(rho,40))*100,1)+'%';
+
+  // ── Empleados ──
+  const emu=+document.getElementById('e-mu').value, esig=+document.getElementById('e-sig').value;
+  const er=computeEmp(rho,emu,esig,
+    +document.getElementById('e-sa').value,+document.getElementById('e-se').value,+document.getElementById('e-sf').value,
+    +document.getElementById('e-fn').value,+document.getElementById('e-sc').value,
+    +document.getElementById('e-ti').value,+document.getElementById('e-tg').value,+document.getElementById('e-km').value);
+
+  document.getElementById('e-sa-v').textContent=f2(er.sa*100,1)+'%';
+  document.getElementById('e-se-v').textContent=f2(er.se*100,1)+'%';
+  document.getElementById('e-sf-v').textContent=f2(er.sf*100,1)+'%';
+  document.getElementById('e-fn-v').textContent=document.getElementById('e-fn').value+'%';
+  const sc_e=+document.getElementById('e-sc').value;
+  document.getElementById('e-sc-v').textContent=`${sc_e}/${100-sc_e}`;
+  ['a','e','f'].forEach((k,i)=>{
+    document.getElementById('e-bb-'+k).style.width=([er.sa,er.se,er.sf][i]*100)+'%';
+  });
+  document.getElementById('e-vhint').textContent=er.overflow
+    ?`⚠ Var_obs=${f2(er.Vo_star,1)} > Var_target=${f2(er.Vt,1)} — aumentar σ_target`
+    :`Var restante tras obs: ${f2(er.Vr,2)} (${f2(er.Vr/er.Vt*100,1)}% de Var_target)`;
+  document.getElementById('e-ov').classList.toggle('show',er.overflow);
+  renderBetas('e-betas',er); renderMetrics('e-metrics',er,emu,esig,false);
+  setVBar('e-',er.fo,er.fu,er.fn_); renderChecks('e-checks',er,emu,esig,true,rho);
+  renderEligibility(emu, esig);
+  document.getElementById('exp-mult').textContent = (1/(1-rho)).toFixed(0);
+
+  // ── Salario ──
+  const smu=+document.getElementById('s-mu').value, ssig=+document.getElementById('s-sig').value;
+  document.getElementById('s-mu-lv').textContent='≈ '+fK(Math.exp(smu))+' pesos';
+  document.getElementById('s-sig-cv').textContent='CV ≈ '+f2(Math.sqrt(Math.exp(ssig*ssig)-1)*100,1)+'%';
+
+  const sr=computeSal(rho,smu,ssig,
+    +document.getElementById('s-fo').value,
+    +document.getElementById('s-sa').value,+document.getElementById('s-se').value,+document.getElementById('s-sf').value,
+    +document.getElementById('s-fn').value,+document.getElementById('s-sc').value,
+    +document.getElementById('s-ti').value,+document.getElementById('s-tg').value,+document.getElementById('s-km').value);
+
+  document.getElementById('s-fo-v').textContent=document.getElementById('s-fo').value+'%';
+  document.getElementById('s-sa-v').textContent=f2(sr.sa*100,1)+'%';
+  document.getElementById('s-se-v').textContent=f2(sr.se*100,1)+'%';
+  document.getElementById('s-sf-v').textContent=f2(sr.sf*100,1)+'%';
+  document.getElementById('s-fn-v').textContent=document.getElementById('s-fn').value+'%';
+  const sc_s=+document.getElementById('s-sc').value;
+  document.getElementById('s-sc-v').textContent=`${sc_s}/${100-sc_s}`;
+  ['a','e','f'].forEach((k,i)=>{
+    document.getElementById('s-bb-'+k).style.width=([sr.sa,sr.se,sr.sf][i]*100)+'%';
+  });
+  document.getElementById('s-vhint').textContent=
+    `Var restante para no-obs+ruido: ${f2(sr.Vr,4)} (${f2(sr.Vr/sr.Vt*100,1)}% de Var_target)`;
+  document.getElementById('s-ov-neg').classList.toggle('show', sr.negAlpha);
+  renderBetas('s-betas',sr); renderMetrics('s-metrics',sr,smu,ssig,true);
+  setVBar('s-',sr.fo,sr.fu,sr.fn_); renderChecks('s-checks',sr,smu,ssig,false,rho);
+
+  // ── Config ──
+  lastER = er; lastSR = sr; lastRho = rho;
+  renderConfig();
+}
+
+// ── Eligibility fraction ──
+function renderEligibility(mu, sigma) {
+  const p = Φ((100 - mu)/sigma) - Φ((3 - mu)/sigma);
+  const pct = (p*100).toFixed(1);
+  const box = document.getElementById('e-elig-box');
+  const inTarget = p >= 0.30 && p <= 0.60;
+  const nearTarget = p >= 0.20 && p <= 0.80;
+  box.className = 'elig-box ' + (inTarget ? 'ok' : nearTarget ? 'warn' : 'bad');
+  document.getElementById('e-elig-pct').textContent = pct + '%';
+  document.getElementById('e-elig-formula').textContent =
+    `Φ((100−${mu})/${sigma}) − Φ((3−${mu})/${sigma}) = ${pct}%`;
+  const tgt = document.getElementById('e-elig-target');
+  if (inTarget) {
+    tgt.textContent = '✓ dentro del rango óptimo (30–60%)';
+  } else if (p > 0.80) {
+    tgt.textContent = `⚠ demasiadas firmas elegibles — μ* muy centrado o σ* grande`;
+  } else if (p < 0.20) {
+    tgt.textContent = `⚠ pocas firmas elegibles — μ* fuera del rango [3,100] o σ* pequeño`;
+  } else {
+    tgt.textContent = `~ cerca del rango óptimo (30–60%)`;
+  }
+}
+
+// ── Config export ──
+let lastER, lastSR, lastRho, currentFmt = 'json';
+
+function configJSON(er, sr, rho) {
+  const hl = Math.log(0.5)/Math.log(rho);
+  const obj = {
+    panel: {
+      rho: parseFloat(rho.toFixed(3)),
+      multiplicador: parseFloat((1/(1-rho)).toFixed(1)),
+      vida_media_periodos: parseFloat(hl.toFixed(1))
+    },
+    empleados: {
+      mu_target: parseFloat(document.getElementById('e-mu').value),
+      sigma_target: parseFloat(document.getElementById('e-sig').value),
+      betas: {
+        antiguedad:           parseFloat(er.ba.toFixed(6)),
+        exportadora:          parseFloat(er.be.toFixed(6)),
+        ratio_formalidad:     parseFloat(er.bf.toFixed(6)),
+        calidad_gerencial:    parseFloat(er.b_cal.toFixed(6)),
+        productividad_latente:parseFloat(er.b_prod.toFixed(6))
+      },
+      volatilidad_sigma_e: parseFloat(er.se_val.toFixed(6)),
+      tau_imm:  parseFloat(document.getElementById('e-ti').value),
+      tau_grad: parseFloat(document.getElementById('e-tg').value),
+      k_max:    parseInt(document.getElementById('e-km').value),
+      tau_max:  parseFloat(er.tau_max.toFixed(4)),
+      SNR:      parseFloat(er.SNR.toFixed(4))
+    },
+    salario_promedio: {
+      mu_target_log:    parseFloat(document.getElementById('s-mu').value),
+      sigma_target_log: parseFloat(document.getElementById('s-sig').value),
+      mu_target_nivel_pesos: parseFloat(Math.exp(parseFloat(document.getElementById('s-mu').value)).toFixed(0)),
+      alpha0: parseFloat(sr.alpha0.toFixed(6)),
+      betas: {
+        antiguedad:           parseFloat(sr.ba.toFixed(6)),
+        exportadora:          parseFloat(sr.be.toFixed(6)),
+        ratio_formalidad:     parseFloat(sr.bf.toFixed(6)),
+        calidad_gerencial:    parseFloat(sr.b_cal.toFixed(6)),
+        productividad_latente:parseFloat(sr.b_prod.toFixed(6))
+      },
+      volatilidad_sigma_e: parseFloat(sr.se_val.toFixed(6)),
+      tau_imm:  parseFloat(document.getElementById('s-ti').value),
+      tau_grad: parseFloat(document.getElementById('s-tg').value),
+      k_max:    parseInt(document.getElementById('s-km').value),
+      tau_max:  parseFloat(sr.tau_max.toFixed(4)),
+      SNR:      parseFloat(sr.SNR.toFixed(4))
+    }
+  };
+  return JSON.stringify(obj, null, 2);
+}
+
+function configPyDict(er, sr, rho) {
+  const hl = Math.log(0.5)/Math.log(rho);
+  const n = (x, d=6) => parseFloat(x.toFixed(d));
+  const smu = parseFloat(document.getElementById('s-mu').value);
+  return `# Generado por calibracion_interactiva.html
+# Burn-in: Y_i0 = c_i/(1-rho) + xi_i,  xi_i ~ N(0, sigma_e**2 / (1 - rho**2))
+# Salario: c_i = alpha0 + sum(beta_k * X_ik)  →  alpha0 fija la media
+
+config = {
+    "panel": {
+        "rho": ${n(rho,3)},
+        "multiplicador": ${n(1/(1-rho),1)},
+        "vida_media_periodos": ${n(hl,1)},
+    },
+    "empleados": {
+        "mu_target": ${document.getElementById('e-mu').value},
+        "sigma_target": ${document.getElementById('e-sig').value},
+        "betas": {
+            "antiguedad":            ${n(er.ba)},
+            "exportadora":           ${n(er.be)},
+            "ratio_formalidad":      ${n(er.bf)},
+            "calidad_gerencial":     ${n(er.b_cal)},
+            "productividad_latente": ${n(er.b_prod)},
+        },
+        "volatilidad_sigma_e": ${n(er.se_val)},
+        "tau_imm":  ${document.getElementById('e-ti').value},
+        "tau_grad": ${document.getElementById('e-tg').value},
+        "k_max":    ${document.getElementById('e-km').value},
+    },
+    "salario_promedio": {
+        "mu_target_log":    ${document.getElementById('s-mu').value},   # ln(salario) — nivel: ~${fK(Math.exp(smu))} pesos
+        "sigma_target_log": ${document.getElementById('s-sig').value},
+        "alpha0": ${n(sr.alpha0)},   # intercepto: c_i = alpha0 + sum(beta_k * X_ik)
+        "betas": {
+            "antiguedad":            ${n(sr.ba)},
+            "exportadora":           ${n(sr.be)},
+            "ratio_formalidad":      ${n(sr.bf)},
+            "calidad_gerencial":     ${n(sr.b_cal)},
+            "productividad_latente": ${n(sr.b_prod)},
+        },
+        "volatilidad_sigma_e": ${n(sr.se_val)},
+        "tau_imm":  ${document.getElementById('s-ti').value},
+        "tau_grad": ${document.getElementById('s-tg').value},
+        "k_max":    ${document.getElementById('s-km').value},
+    },
+}`;
+}
+
+function renderConfig() {
+  if (!lastER || !lastSR) return;
+  const txt = currentFmt === 'json'
+    ? configJSON(lastER, lastSR, lastRho)
+    : configPyDict(lastER, lastSR, lastRho);
+  document.getElementById('config-out').textContent = txt;
+}
+
+function setFmt(fmt) {
+  currentFmt = fmt;
+  document.getElementById('btn-json').classList.toggle('active', fmt==='json');
+  document.getElementById('btn-pydict').classList.toggle('active', fmt==='pydict');
+  document.getElementById('fmt-hint').innerHTML = fmt === 'json'
+    ? 'JSON: <code style="background:#f3f4f6;padding:1px 5px;border-radius:3px">import json; cfg = json.load(open("calibracion.json"))</code>'
+    : 'Python: <code style="background:#f3f4f6;padding:1px 5px;border-radius:3px">exec(open("calibracion.py").read())  # define \'config\'</code>';
+  renderConfig();
+}
+
+function copyConfig() {
+  const txt = document.getElementById('config-out').textContent;
+  navigator.clipboard.writeText(txt).then(() => {
+    const btn = document.getElementById('btn-copy');
+    btn.textContent = '¡Copiado!';
+    btn.classList.add('done');
+    setTimeout(() => { btn.textContent = 'Copiar al portapapeles'; btn.classList.remove('done'); }, 1800);
+  });
+}
+
+function downloadConfig() {
+  const ext  = currentFmt === 'json' ? 'json' : 'py';
+  const mime = currentFmt === 'json' ? 'application/json' : 'text/x-python';
+  const txt  = document.getElementById('config-out').textContent;
+  const blob = new Blob([txt], { type: mime });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `calibracion_simulacion.${ext}`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function preset(name) {
+  const vals = {
+    calibrado:   ['0.95','40','25','40','20','40','30','60','2','0.5','6',
+                  '12.0','0.30','20','50','20','30','40','60','0.05','0.01','6'],
+    conservador: ['0.90','35','20','33','33','34','40','50','3','0.5','6',
+                  '11.8','0.35','15','50','20','30','40','50','0.05','0.01','6']
+  };
+  const ids=['rho','e-mu','e-sig','e-sa','e-se','e-sf','e-fn','e-sc','e-ti','e-tg','e-km',
+             's-mu','s-sig','s-fo','s-sa','s-se','s-sf','s-fn','s-sc','s-ti','s-tg','s-km'];
+  vals[name].forEach((v,i)=>{ document.getElementById(ids[i]).value=v; });
+  update();
+}
+
+update();
+</script>
+</body>
+</html>

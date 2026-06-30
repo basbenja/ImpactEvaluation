@@ -36,7 +36,9 @@ training:
 optuna:
   metric: f1
   direction: maximize
-  n_trials: 50
+  threshold: 0.5
+  cv_folds: 3
+  n_trials: 10
   search_space:
     learning_rate: [1.0e-4, 1.0e-3, 1.0e-2]
     dropout: [0.3, 0.5, 0.7]

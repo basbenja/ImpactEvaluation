@@ -28,6 +28,7 @@ from data_generation.simulator import DataSimulator
 from models.lstm_classifier import LSTMClassifier
 from splits.split_generator import SplitGenerator
 from training.trainer import Trainer
+from training.tuner import Tuner
 
 log = logging.getLogger(__name__)
 
@@ -139,55 +140,26 @@ def train(cfg: dict, panel, run_dir: Path) -> dict:
 
 
 def tune(cfg: dict, panel, run_dir: Path) -> dict:
-    import optuna
+    opt_cfg = cfg['optuna']
+    t_cfg   = cfg['training']
+    device  = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    opt_cfg   = cfg['optuna']
-    t_cfg     = cfg['training']
-    device    = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    ss        = opt_cfg['search_space']
+    _, _, connector = build_dataloaders(cfg, panel, batch_size=t_cfg['batch_size'])
 
-    train_loader, test_loader, connector = build_dataloaders(
-        cfg, panel, batch_size=t_cfg['batch_size']
+    tuner = Tuner(
+        connector=connector,
+        n_features=len(connector.feature_cols),
+        n_cohorts=len(connector._cohorts_periods),
+        t_cfg=t_cfg,
+        opt_cfg=opt_cfg,
+        device=device,
     )
-    n_cohorts   = len(connector._cohorts_periods)
-    n_features  = len(connector.feature_cols)
-
-    def objective(trial: optuna.Trial) -> float:
-        lr               = trial.suggest_categorical('learning_rate', ss['learning_rate'])
-        dropout          = trial.suggest_categorical('dropout', ss['dropout'])
-        lstm_hidden_size = trial.suggest_categorical('lstm_hidden_size', ss['lstm_hidden_size'])
-        lstm_num_layers  = trial.suggest_categorical('lstm_num_layers', ss['lstm_num_layers'])
-
-        model = LSTMClassifier(
-            n_features=n_features,
-            lstm_hidden_size=lstm_hidden_size,
-            lstm_num_layers=lstm_num_layers,
-            n_cohorts=n_cohorts,
-            dropout=dropout,
-        )
-        optimizer_cls = getattr(torch.optim, t_cfg['optimizer'])
-        optimizer = optimizer_cls(model.parameters(), lr=lr)
-        trainer = Trainer(
-            model=model,
-            optimizer=optimizer,
-            criterion=nn.BCEWithLogitsLoss(),
-            device=device,
-        )
-        trainer.fit(train_loader, test_loader, n_epochs=t_cfg['n_epochs'])
-        return trainer.accuracy(test_loader)
-
-    study = optuna.create_study(
-        direction='maximize',
-        storage=f'sqlite:///{run_dir}/optuna.db',
+    study = tuner.run(
         study_name=cfg['experiment']['name'],
-        load_if_exists=True,
+        storage=f'sqlite:///{run_dir}/optuna.db',
     )
-    study.optimize(objective, n_trials=opt_cfg['n_trials'])
 
-    best = study.best_trial
-    log.info(f"Best trial: accuracy={best.value:.4f} | params={best.params}")
-
-    # Final model with best params
+    best     = study.best_trial
     best_cfg = copy.deepcopy(cfg)
     best_cfg['model']['lstm_hidden_size'] = best.params['lstm_hidden_size']
     best_cfg['model']['lstm_num_layers']  = best.params['lstm_num_layers']

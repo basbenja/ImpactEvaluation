@@ -77,10 +77,10 @@ class SplitGenerator:
             'test':  {'C': control_ids, 'NiNi': test_nini},
         }
 
-        train = treated_ids + train_nini
-        test  = control_ids + test_nini
+        train_ids = treated_ids + train_nini
+        test_ids  = control_ids + test_nini
 
-        return train, test
+        return train_ids, test_ids
 
     def save(self, path: str):
         """Guarda el split como JSON."""
