@@ -534,6 +534,26 @@ class DataSimulator:
         # tiempo. O sea, las columnas son: id_firma, inicio_firma, var1_0,
         # var2_0, ..., varN_0
         firms = self._generate_initial_conditions()
+
+        # 1.a. Generar los períodos de burn-in para las outcomes
+        burn_prev = {o: firms[f'{o}_0'].values.copy() for o in self.outcomes}
+
+        for _ in range(self.N_BURN_IN):
+            for outcome in self.outcomes:
+                new_obs, _ = self._evolve_outcome(
+                    firms=firms,
+                    prev_values=burn_prev[outcome],
+                    # En períodos de burn-in, el contrafactual es igual al observado
+                    prev_values_cf=burn_prev[outcome],
+                    outcome=outcome,
+                    t=0,
+                    treatment_effect=None
+                )
+                burn_prev[outcome] = new_obs
+
+        for outcome in self.outcomes:
+            firms[f'{outcome}_0'] = burn_prev[outcome]
+
         firms['tratado'] = False
         firms['cohorte'] = -1
         firms['periodo_tratamiento'] = -1
