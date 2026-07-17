@@ -103,6 +103,9 @@ DATA_CONFIG = {
             'volatilidad': 3,
             'integer': True,
             'min': 1,
+            # Que el efecto de tratamiento sea ADITIVO en este outcome quiere
+            # decir que se suma una cantidad determinada al outcome:
+            # nuevo_outcome = viejo_outcome + efecto_tratamiento
             'efecto_tratamiento': 'aditivo',
             'efectos_variables': {
                 # Firmas más antiguas tienen estructuras de RRHH más
@@ -144,6 +147,9 @@ DATA_CONFIG = {
             'persistencia': 0.98,
             'volatilidad': 0.025,
             'min': 50000,
+            # Que el efecto de tratamiento sea porcentual en este outcome quiere
+            # decir que el efecto se expresa como un porcentaje del valor actual
+            # nuevo_outcome = viejo_outcome * (1 + efecto_tratamiento)
             'efecto_tratamiento': 'porcentual',
             'efectos_variables': {
                 # Por ahora, copiamos los del outcome anterior

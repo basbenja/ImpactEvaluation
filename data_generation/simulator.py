@@ -353,7 +353,16 @@ class DataSimulator:
                 for idx, pt
                 in zip(treated_firms.index, treated_firms['periodo_tratamiento'].values)
             ])
-            growth = (current_values - baseline_values) / (np.abs(baseline_values) + 1)
+
+            dyn = self.config['dinamica_outcomes'][outcome]
+            if dyn['efecto_tratamiento'] == 'porcentual':
+                # Para outcomes porcentuales, el crecimiento relativo es
+                # (Y_t - Y_0) / Y_0
+                growth = (current_values - baseline_values) / (np.abs(baseline_values) + 1e-6)
+            elif dyn['efecto_tratamiento'] == 'aditivo':
+                # Para outcomes aditivos, el crecimiento relativo es (Y_t - Y_0)
+                growth = current_values - baseline_values
+
             normalized_growth = growth / efecto_maximo
             outcome_growths.append(np.average(normalized_growth, weights=decay_weights))
 
