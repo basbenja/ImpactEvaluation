@@ -24,6 +24,9 @@ DATA_CONFIG = {
     # -------------------------------------------------------------------------
     'variables': {
         # Variables observables
+        # antiguedad es la edad real que tiene la firma en el momento en que
+        # arranca su historia observable en el panel. Después, en el código
+        # va envejeciendo a medida que pasa el tiempo.
         'antiguedad': {
             'distribution': 'exponential',
             'params': {'scale': 8},

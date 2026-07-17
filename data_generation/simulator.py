@@ -212,18 +212,16 @@ class DataSimulator:
             else:
                 new_obs = new_obs + treatment_effect
 
-        new_obs = np.maximum(new_obs, dyn.get('min', 0))
-
         # ── 5. CONTRAFACTUAL ─────────────────────────────────────────
         new_cf = base_cf.copy()
 
-        for values in [new_obs, new_cf]:
-            # Asegurar rangos
-            if dyn.get('min'):
-                values = np.maximum(values, dyn['min'])
-            # Asegurar tipos
-            if dyn.get('integer'):
-                values = np.round(values).astype(int)
+        # Asegurar rangos y tipos en observado y contrafactual
+        if dyn.get('min'):
+            new_obs = np.maximum(new_obs, dyn['min'])
+            new_cf = np.maximum(new_cf, dyn['min'])
+        if dyn.get('integer'):
+            new_obs = np.round(new_obs).astype(int)
+            new_cf = np.round(new_cf).astype(int)
 
         return new_obs, new_cf
 
@@ -572,6 +570,12 @@ class DataSimulator:
             for var in self.fixed_features:
                 if f'{var}_0' in firms.columns:
                     pdata[var] = firms[f'{var}_0']
+
+            # antiguedad envejece un período por cada período que la firma
+            # efectivamente existe dentro del panel (desde inicio_firma)
+            if 'antiguedad_0' in firms.columns:
+                pdata['antiguedad'] = firms['antiguedad_0'] + (t - firms['inicio_firma'])
+                firms[f'antiguedad_{t}'] = pdata['antiguedad']
 
             # 3. Evolucionar outcomes
             for outcome in self.outcomes:
