@@ -196,7 +196,6 @@ DATA_CONFIG = {
             'empleados': 0.008,
             'antiguedad': 0.015,
             'exportadora': 0.35,
-            'tiene_credito': 0.25,
             'ratio_formalidad': 0.4,
             'calidad_gerencial': 0.5,       # NO OBSERVABLE
             'productividad_latente': 0.25,  # NO OBSERVABLE
@@ -253,14 +252,7 @@ DATA_CONFIG = {
             'efecto_maximo': 0.08,          # Máximo 8%
             'periodos_hasta_maximo': 8,
             'heterogeneidad': {'calidad_gerencial': 0.01},
-        },
-        'tiene_credito': {
-            'efecto_inmediato': 0.30,
-            'efecto_gradual': 0.04,
-            'efecto_maximo': 0.45,
-            'periodos_hasta_maximo': 4,
-            'heterogeneidad': {'propension_credito': 0.08},
-        },
+        }
     },
 
     # -------------------------------------------------------------------------
