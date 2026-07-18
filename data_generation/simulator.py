@@ -171,6 +171,15 @@ class DataSimulator:
         """
         dyn = self.config['dinamica_outcomes'][outcome]
 
+        is_log = dyn.get('escala') == 'log'
+
+        if is_log:
+            base_prev = np.log(prev_values)
+            base_prev_cf = np.log(prev_values_cf)
+        else:
+            base_prev = prev_values
+            base_prev_cf = prev_values_cf
+
         # ── 1. EFECTOS FIJOS ────────────────────────────────────────────────────────
         # Capturan heterogeneidad individual constante en el tiempo.
         # Se descomponen en variables observables (y no observables) que no son
@@ -215,12 +224,21 @@ class DataSimulator:
                 # base_cf mantiene el efecto acotado: en el largo plazo, Y_obs
                 # converge a Y_cf * (1 + efecto_maximo), tal como indica el
                 # config.
-                new_obs = base_cf * (1 + treatment_effect)
+                if is_log:
+                    new_obs = base_cf + np.log(1 + treatment_effect)
+                else:
+                    new_obs = base_cf * (1 + treatment_effect)
             else:
                 new_obs = new_obs + treatment_effect
 
         # ── 5. CONTRAFACTUAL ─────────────────────────────────────────
         new_cf = base_cf.copy()
+
+        # Volver a niveles antes de aplicar límites — clip y redondeo
+        # siempre operan en pesos/unidades, nunca en log.
+        if is_log:
+            new_obs = np.exp(new_obs)
+            new_cf = np.exp(new_cf)
 
         # Asegurar rangos y tipos en observado y contrafactual
         if dyn.get('min'):

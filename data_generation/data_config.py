@@ -144,6 +144,7 @@ DATA_CONFIG = {
             }
         },
         'salario_promedio': {
+            'escala': 'log',
             'persistencia': 0.98,
             'volatilidad': 0.025,
             'min': 50000,
