@@ -208,7 +208,14 @@ class DataSimulator:
         new_obs = base_obs.copy()
         if treatment_effect is not None:
             if dyn['efecto_tratamiento'] == 'porcentual':
-                new_obs = new_obs * (1 + treatment_effect)
+                # Se aplica sobre el nivel CONTRAFACTUAL del mismo período, no
+                # sobre base_obs. Multiplicar base_obs infla la persistencia
+                # efectiva a persistencia*(1+treatment_effect) período a período
+                # (puede superar 1 y volverse explosivo). Multiplicar sobre
+                # base_cf mantiene el efecto acotado: en el largo plazo, Y_obs
+                # converge a Y_cf * (1 + efecto_maximo), tal como indica el
+                # config.
+                new_obs = base_cf * (1 + treatment_effect)
             else:
                 new_obs = new_obs + treatment_effect
 
