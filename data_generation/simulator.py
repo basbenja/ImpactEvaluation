@@ -210,8 +210,8 @@ class DataSimulator:
 
         # ── Evolución del outcome y su contrafactual ──────────────────────────
         # Y_it = ρ·Y_i,t-1 + α_i + λ_t + ε_it
-        base_obs = dyn['persistencia'] * prev_values + fixed_effects + time_effects + error
-        base_cf  = dyn['persistencia'] * prev_values_cf + fixed_effects + time_effects + error
+        base_obs = dyn['persistencia'] * base_prev + fixed_effects + time_effects + error
+        base_cf  = dyn['persistencia'] * base_prev_cf + fixed_effects + time_effects + error
 
         # ── 4. EFECTO DEL TRATAMIENTO ─────────────────────────────────────────
         new_obs = base_obs.copy()
